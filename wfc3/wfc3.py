@@ -1237,9 +1237,9 @@ def lnprior_lnlike_secondary( jd, t, syspars, red, Tmidlit, batpar ):
     return lnprior, lnlike, eval_model_secondary, eval_meanfunc_secondary
 
 def lnpost_func( lnprior, lnlike ):
-        """
-        Defines the model posterior to be marginalised over.
-        """
+    """
+    Defines the model posterior to be marginalised over.   
+    """
     def lnpost( pars, x, y, e ):
         l1 = lnprior( pars )
         if np.isfinite( l1 )==False:
