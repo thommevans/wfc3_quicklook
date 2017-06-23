@@ -62,7 +62,6 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
 
     # Create and fit the white lightcurve:
     if switches['create_and_fit_whitelc']==True:
-        ngroups
         whitelc_fpath = create_whitelc( wlc, spectra_rdiff_zapped_fpath, red )
         white_fpaths = fit_whitelc( whitelc_fpath, syspars, red, \
                                     ngroups=white_mcmc['ngroups'], \
