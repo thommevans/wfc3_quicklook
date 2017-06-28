@@ -1823,7 +1823,7 @@ def get_frames( red ):
     bgd_ixs = np.array( red['bg_disp_ixs'] )-ntrim
     if red['config']=='G141':
         filter_str = 'G141'
-    if red['config']=='G102':
+    elif red['config']=='G102':
         filter_str = 'G102'
     else:
         pdb.set_trace()
