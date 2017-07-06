@@ -34,8 +34,9 @@ RJUP = 7.149e7
 #################################################################################
 # Wrapper for running pipeline.
 
-def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
-                     'create_speclcs':True, 'fit_speclcs':True }, \
+def main( switches={ 'extract_spectra':True, 'create_whitelc':True, \
+                     'fit_whitelc':True, 'create_speclcs':True, \
+                     'fit_speclcs':True }, \
           white_mcmc={ 'ngroups':3, 'nwalkers':150, 'nburn1':100, \
                        'nburn2':500, 'nsteps':500 }, \
           save_rdiff_pngs=False ):
@@ -61,8 +62,9 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
     spectra_rdiff_zapped_fpath = spectra_fpaths[3]
 
     # Create and fit the white lightcurve:
-    if switches['create_and_fit_whitelc']==True:
+    if switches['create_whitelc']==True:
         whitelc_fpath = create_whitelc( wlc, spectra_rdiff_zapped_fpath, red )
+    if switches['fit_whitelc']==True:
         white_fpaths = fit_whitelc( whitelc_fpath, syspars, red, \
                                     ngroups=white_mcmc['ngroups'], \
                                     nwalkers=white_mcmc['nwalkers'], \
