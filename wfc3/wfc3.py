@@ -880,7 +880,7 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
         Tmidlit -= syspars['P']
 
     # Precull obviouse outliers:
-    keepixs = whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, whitelc['ld_nonlin'], nsig=10 )
+    keepixs = whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, whitelc['ld_nonlin'], nsig=5 )
 
     # Initialise a batman object: 
     batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=whitelc['ld_nonlin'] )
@@ -1060,7 +1060,7 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     ofile.close()
     output = {}
     output['whitelc'] = whitelc
-    output['cullixs'] = cullixs
+    output['cullixs'] = cullixs[keepixs]
     output['syspars'] = syspars
     output['red'] = red
     output['Tmidlit'] = Tmidlit
@@ -1659,13 +1659,12 @@ def plot_basic_timeseries( z, red ):
     plt.ion()
     return opath
 
-def whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, nonlin_ld_pars, nsig=10 ):
+def whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, nonlin_ld_pars, nsig=5 ):
     phi = ivars['hstphasev']
     ndat = flux.size
     offset = np.ones( ndat )
     keepixs = np.arange( ndat )
     niter = 2
-    pdb.set_trace()
     for k in range( niter ):
         batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=nonlin_ld_pars )
         C = np.column_stack( [ offset, phi, phi**2., phi**3., phi**4., t ] )[keepixs,:]
