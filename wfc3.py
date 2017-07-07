@@ -64,6 +64,8 @@ def main( switches={ 'extract_spectra':True, 'create_whitelc':True, \
     # Create and fit the white lightcurve:
     if switches['create_whitelc']==True:
         whitelc_fpath = create_whitelc( wlc, spectra_rdiff_zapped_fpath, red )
+    else:
+        whitelc_fpath = get_whitelc_fpath( spectra_rdiff_zapped_fpath )
     if switches['fit_whitelc']==True:
         white_fpaths = fit_whitelc( whitelc_fpath, syspars, red, \
                                     ngroups=white_mcmc['ngroups'], \
@@ -107,7 +109,7 @@ def dataset_parameters():
     # Parameters controlling the data reduction:
     red = {}
     red['config'] = 'G141'
-    red['ddir'] = os.path.join( HOMEDIR, 'data1/hst/WASP-39/G141/visit1/ima' )
+    red['ddir'] = os.path.join( HOMEDIR, 'data1/hst/WASP-39/G141/visit2/ima' )
     red['count_units'] = 'electrons'
     red['scanmode'] = 'forward'
     red['apradius'] = 35
@@ -118,7 +120,7 @@ def dataset_parameters():
     red['crossdisp_bound_ixs'] = [ 20, 140 ]
     red['trim_disp_ixs'] = [ 40, 240 ]
     #red['shiftstretch_disp_ixs'] = [ 130, 240 ]
-    red['shiftstretch_disp_ixs'] = [ 76, 190 ]
+    red['shiftstretch_disp_ixs'] = [ 78, 192 ]
     red['bg_crossdisp_ixs'] = [ 20, 35 ]
     red['bg_disp_ixs'] = [ 50, 230 ]
     red['discard_first_exposure'] = True
@@ -868,18 +870,21 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     errs = whitelc['uncs'][cullixs]
     sigw = np.median( errs )
 
-    # Initialise a batman object: TODO = THIS MAYBE SHOULD DEPEND ON THE 
-    batpar, pmodel = get_batman_object( jd, syspars, ld_type='nonlinear', ld_pars=whitelc['ld_nonlin'] )
-
-    # GP inputs for the white lightcurve fit:
-    xvec = np.column_stack( [ ivars['hstphasev'], ivars['wavshift_pixelsv'], ivars['cdcsv'] ] )
-
     # Re-specify literature epoch to time baseline of data:
     Tmidlit = syspars['Tmid']
     while Tmidlit<jd.min():
         Tmidlit += syspars['P']
     while Tmidlit>jd.max():
         Tmidlit -= syspars['P']
+
+    # Precull obviouse outliers:
+    keepixs = whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, whitelc['ld_nonlin'], nsig=10 )
+
+    # Initialise a batman object: 
+    batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=whitelc['ld_nonlin'] )
+
+    # GP inputs for the white lightcurve fit:
+    xvec = np.column_stack( [ ivars['hstphasev'], ivars['wavshift_pixelsv'], ivars['cdcsv'] ] )
 
     # Initial guesses for free parameters and Get the log-likelihood function::
     A_init = 0.001
@@ -890,13 +895,13 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     c1_init = 0
     delT_init = 0
     if syspars['tr_type']=='primary':
-        zfuncs = lnprior_lnlike_primary( jd, t, syspars, red, Tmidlit, batpar )
+        zfuncs = lnprior_lnlike_primary( jd[keepixs], t[keepixs], syspars, red, Tmidlit, batpar )
         RpRs_init = syspars['RpRs']
         labels = [ 'A', 'lniLx', 'lniLy', 'lniLz', 'c0', 'c1', 'RpRs', 'delT' ]
         initvals = [ A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, RpRs_init, delT_init ]
         perturbs = np.array( [ 10e-6, 0.1, 0.1, 0.1, 1e-4, 1e-5, 0.01, 2./60./24. ] )
     elif syspars['tr_type']=='secondary':
-        zfuncs = lnprior_lnlike_secondary( jd, t, syspars, red, Tmidlit, batpar )
+        zfuncs = lnprior_lnlike_secondary( jd[keepixs], t[keepixs], syspars, red, Tmidlit, batpar )
         SecDepth_init = 0.0
         labels = [ 'A', 'lniLx', 'lniLy', 'lniLz', 'c0', 'c1', 'SecDepth', 'delT' ]
         initvals = [ A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, SecDepth_init, delT_init ]
@@ -909,7 +914,7 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     eval_meanfunc = zfuncs[3]
     neglnpost, lnpost = lnpost_func( lnprior, lnlike )    
 
-    data = ( xvec, flux, sigw )
+    data = ( xvec[keepixs,:], flux[keepixs], sigw )
     pfit = scipy.optimize.fmin( neglnpost, initvals, args=data, maxiter=1e4, xtol=1e-4, ftol=1e-4 )
 
     # Initial emcee burn-in to possibly locate better solution:
@@ -974,41 +979,51 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     # Inspect the output:
     xeval = xvec
     ttrend_mle, psignal_mle, gpobj_mle = eval_model( mle_arr, xvec )
-    gpobj_mle.compute( xvec, yerr=sigw )
-    resids_mleb = flux - ttrend_mle*psignal_mle
-    mu_mle, cov_mle = gpobj_mle.predict( resids_mleb, xeval )
+    gpobj_mle.compute( xvec[keepixs,:], yerr=sigw )
+    resids_mleb = flux[keepixs] - ttrend_mle*psignal_mle
+    mu_mle, cov_mle = gpobj_mle.predict( resids_mleb, xeval[keepixs,:] )
     std_mle = np.sqrt( np.diag( cov_mle ) )
     zb_mle = ttrend_mle*psignal_mle 
     zc_mle = zb_mle + mu_mle
-    resids_mlec = flux - zc_mle
+    resids_mlec = flux[keepixs] - zc_mle
     resids_std = np.std( resids_mlec )
     resids_scatter = resids_std/sigw
     plt.ioff()
     print( '\nPlotting the white lightcurve fit...' )
     fig1 = plt.figure( figsize=[8,10] )
-    ax1a = fig1.add_axes( [ 0.12, 0.55, 0.85, 0.42 ] )
-    ax1b = fig1.add_axes( [ 0.12, 0.25, 0.85, 0.30 ], sharex=ax1a )
-    ax1c = fig1.add_axes( [ 0.12, 0.05, 0.85, 0.20 ], sharex=ax1a )
-    ax1a.errorbar( thrs, flux, yerr=sigw, fmt='.k' )
-    ax1b.errorbar( thrs, (1e6)*resids_mleb, yerr=(1e6)*sigw, fmt='.k' )
-    ax1c.errorbar( thrs, (1e6)*resids_mlec, yerr=(1e6)*sigw, fmt='.k' )
+    xlow = 0.12
+    ylowa = 0.55
+    ylowb = 0.25
+    ylowc = 0.05
+    axw = 0.85
+    axha = 0.42
+    axhb = 0.30
+    axhc = 0.20
+    ax1a = fig1.add_axes( [ xlow, ylowa, axw, axha ] )
+    ax1b = fig1.add_axes( [ xlow, ylowb, axw, axhb ], sharex=ax1a )
+    ax1c = fig1.add_axes( [ xlow, ylowc, axw, axhc ], sharex=ax1a )
+    ax1a.errorbar( thrs, flux, yerr=sigw, fmt='.r' )
+    ax1a.errorbar( thrs[keepixs], flux[keepixs], yerr=sigw, fmt='.k' )
+    ax1b.errorbar( thrs[keepixs], (1e6)*resids_mleb, yerr=(1e6)*sigw, fmt='.k' )
+    ax1c.errorbar( thrs[keepixs], (1e6)*resids_mlec, yerr=(1e6)*sigw, fmt='.k' )
     ndraws = 20
     for ix in np.random.randint( nsamples, size=ndraws ):
         ttrend_i, psignal_i, gpobj_i = eval_model( chain[ix,:], xvec )
-        gpobj_i.compute( xvec, yerr=sigw )
-        resids = flux - ttrend_mle*psignal_mle
-        gpsamp_i = gpobj_i.sample_conditional( resids, xeval )
-        ax1a.plot( thrs, ttrend_mle*psignal_mle+gpsamp_i, '-r', alpha=0.3 )
-        ax1b.plot( thrs, (1e6)*gpsamp_i, '-r', alpha=0.3 )
+        gpobj_i.compute( xvec[keepixs,:], yerr=sigw )
+        resids = flux[keepixs] - ttrend_mle*psignal_mle
+        gpsamp_i = gpobj_i.sample_conditional( resids, xeval[keepixs,:] )
+        ax1a.plot( thrs[keepixs], ttrend_mle*psignal_mle+gpsamp_i, '-y', alpha=0.3 )
+        ax1b.plot( thrs[keepixs], (1e6)*gpsamp_i, '-y', alpha=0.3 )
     jdf = np.linspace( jd.min(), jd.max(), 500 )
     tf = ( jdf-np.mean( jd ) )/np.std( jd )
     thrsf = ( jdf-mle['Tmid'] )*24.
     ttrendf, psignalf = eval_meanfunc( jdf, tf, mle_arr[4:] )
     ax1a.plot( thrsf, ttrendf*psignalf, '-g' )
-    ax1a.plot( thrs, zc_mle, '-b' )
-    ax1b.plot( thrs, (1e6)*mu_mle, '-b' )
-    ax1a.fill_between( thrs, zc_mle-std_mle, zc_mle+std_mle, color=0.8*np.ones( 3 ), zorder=0 )
-    ax1b.fill_between( thrs, (1e6)*(mu_mle-std_mle), (1e6)*(mu_mle+std_mle), color=0.8*np.ones( 3 ), zorder=0 )
+    ax1a.plot( thrs[keepixs], zc_mle, '-b' )
+    ax1b.plot( thrs[keepixs], (1e6)*mu_mle, '-b' )
+    ax1a.fill_between( thrs[keepixs], zc_mle-std_mle, zc_mle+std_mle, color=0.8*np.ones( 3 ), zorder=0 )
+    ax1b.fill_between( thrs[keepixs], (1e6)*(mu_mle-std_mle), (1e6)*(mu_mle+std_mle), \
+                       color=0.8*np.ones( 3 ), zorder=0 )
     ax1c.axhline( 0, zorder=0 )
     ax1a.set_ylabel( 'relative flux' )
     ax1b.set_ylabel( 'resids (ppm)' )
@@ -1016,7 +1031,10 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     ax1c.set_xlabel( 'time-from-mid (hrs)' )
     plt.setp( ax1a.xaxis.get_ticklabels(), visible=False )
     plt.setp( ax1b.xaxis.get_ticklabels(), visible=False )
-    fig1.suptitle( 'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ) )
+    #fig1.suptitle( 'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ) )
+    fig1.text( xlow+0.5*axw, ylowa+axha+0.007, \
+               'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ), \
+               rotation=0, verticalalignment='bottom', horizontalalignment='center' )
     opath_fig1 = os.path.join( odir, 'white_lcfit.pdf' )
     fig1.savefig( opath_fig1 )
     # Corner plot:
@@ -1633,6 +1651,38 @@ def plot_basic_timeseries( z, red ):
     fig.savefig( opath )
     plt.ion()
     return opath
+
+def whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, nonlin_ld_pars, nsig=10 ):
+    phi = ivars['hstphasev']
+    ndat = flux.size
+    offset = np.ones( ndat )
+    keepixs = np.arange( ndat )
+    niter = 2
+    for k in range( niter ):
+        batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=nonlin_ld_pars )
+        C = np.column_stack( [ offset, phi, phi**2., phi**3., phi**4., t ] )[keepixs,:]
+        def model_func( jd, c0, c1, c2, c3, c4, c5, RpRs, delT ):
+            b = np.array( [ c0, c1, c2, c3, c4, c5 ] )
+            ptrend = np.dot( C, b )
+            batpar.t0 = Tmidlit + delT
+            batpar.rp = RpRs
+            pmodel = batman.TransitModel( batpar, jd, fac=0.02, transittype='primary' )
+            psignal = pmodel.light_curve( batpar )
+            return ptrend*psignal
+        initvals = [ 1, 0, 0, 0, 0, 0, syspars['RpRs'], 0 ]
+        pfit = scipy.optimize.curve_fit( model_func, jd[keepixs], flux[keepixs], \
+                                         p0=initvals, sigma=errs[keepixs], absolute_sigma=True )
+        c0, c1, c2, c3, c4, c5, RpRs, delT = pfit[0]
+        b = np.array( [ c0, c1, c2, c3, c4, c5 ] )
+        ptrend = np.dot( C, b )
+        batpar.t0 = Tmidlit + delT
+        batpar.rp = RpRs
+        pmodel = batman.TransitModel( batpar, jd[keepixs], fac=0.02, transittype='primary' )
+        psignal = pmodel.light_curve( batpar )
+        resids_nsig = np.abs( ( flux[keepixs]-ptrend*psignal )/errs[keepixs] )
+        ixs = ( resids_nsig<=nsig )
+        keepixs = keepixs[ixs]
+    return keepixs
 
 def get_batman_object( jd, syspars, ld_type=None, ld_pars=[] ):
     # Define the batman planet object:
