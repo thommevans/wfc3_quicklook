@@ -410,7 +410,7 @@ def prep_frames( red, save_rdiff_pngs=False ):
     ecounts2d_rlast_zapped = zap_rlast[0]
     zap_rdiff = clean_cosmic_rays( ecounts2d_rdiff, inspect_each_frame=False )
     ecounts2d_rdiff_zapped = zap_rdiff[0]
-    save_reconstructed_frames( jd, ecounts2d_rdiff, red, zap_rdiff, save_rdiff_pngs=save_rdiff_pngs )
+    save_reconstructed_frames( jd, ecounts2d_rdiff, red, zap_rdiff, fs, save_rdiff_pngs=save_rdiff_pngs )
     return jd, bg_ppix, ecounts2d_rlast, ecounts2d_rlast_zapped, ecounts2d_rdiff, ecounts2d_rdiff_zapped
 
 
@@ -517,7 +517,7 @@ def clean_cosmic_rays( ecounts2d, nsig_cull_transient=8, nsig_cull_static=10, ni
 
     return ecounts2d_zapped, transient_bad_pixs, static_bad_pixs, ecounts2d_medfilt
 
-def save_reconstructed_frames( jd, ecounts2d, red, zap, save_rdiff_pngs=False ):
+def save_reconstructed_frames( jd, ecounts2d, red, zap, fs, save_rdiff_pngs=False ):
     """
     Creates a data cube containing the reconstructed frames obtained by
     the read-differencing process.
