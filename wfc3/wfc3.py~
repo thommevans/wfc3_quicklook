@@ -21,9 +21,9 @@ BANDPASS_FPATH_G102 = os.path.join( os.getcwd(), 'HST_throughputs/WFC3.IR.G102.1
 
 HST_ORB_PERIOD_DAYS = 96/60./24. # i.e. 96 minutes
 
-ATLAS_FPATH = os.path.join( os.getcwd(), 'Kurucz/ip03k2new.pck' )
+ATLAS_FPATH = os.path.join( os.getcwd(), 'Kurucz/im01k2new.pck' )
 ATLAS_NEWGRID = True
-ATLAS_TEFF = 4750.
+ATLAS_TEFF = 5500.
 ATLAS_LOGG = 4.5
 
 # SI values for standard units:
@@ -34,8 +34,9 @@ RJUP = 7.149e7
 #################################################################################
 # Wrapper for running pipeline.
 
-def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
-                     'create_speclcs':True, 'fit_speclcs':True }, \
+def main( switches={ 'extract_spectra':True, 'create_whitelc':True, \
+                     'fit_whitelc':True, 'create_speclcs':True, \
+                     'fit_speclcs':True }, \
           white_mcmc={ 'ngroups':3, 'nwalkers':150, 'nburn1':100, \
                        'nburn2':500, 'nsteps':500 }, \
           save_rdiff_pngs=False ):
@@ -59,11 +60,13 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
     spectra_rlast_zapped_fpath = spectra_fpaths[1]    
     spectra_rdiff_fpath = spectra_fpaths[2] 
     spectra_rdiff_zapped_fpath = spectra_fpaths[3]
-
+ 
     # Create and fit the white lightcurve:
-    if switches['create_and_fit_whitelc']==True:
-        #ngroups
+    if switches['create_whitelc']==True:
         whitelc_fpath = create_whitelc( wlc, spectra_rdiff_zapped_fpath, red )
+    else:
+        whitelc_fpath = get_whitelc_fpath( spectra_rdiff_zapped_fpath )
+    if switches['fit_whitelc']==True:
         white_fpaths = fit_whitelc( whitelc_fpath, syspars, red, \
                                     ngroups=white_mcmc['ngroups'], \
                                     nwalkers=white_mcmc['nwalkers'], \
@@ -83,7 +86,7 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
 
     # Fit the spectroscopic lightcurves:
     if switches['fit_speclcs']==True:
-        wavc, RpRs_vals, RpRs_uncs = fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath )
+        trspec_fpaths = fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath )
 
     t2 = time.time()
     print( '\n\nTotal time taken = {0:.2f} minutes\n\n'.format( ( t2-t1 )/60. ) )
@@ -105,17 +108,21 @@ def dataset_parameters():
 
     # Parameters controlling the data reduction:
     red = {}
-    red['config'] = 'G102' # or 'G141'
-    red['ddir'] = os.path.join( HOMEDIR, 'extension/to/data/folder' )
-    red['apradius'] = 120
+    red['config'] = 'G102'
+    red['ddir'] = os.path.join( HOMEDIR, 'data1/hst/WASP-39/G102/visit1/ima' )
+    red['count_units'] = 'electrons'
+    red['scanmode'] = 'forward'
+    red['apradius'] = 25
     red['maskradius'] = 35
     red['ntrim_edge'] = 10
     red['smoothing_fwhm'] = None
-    red['crossdisp_bound_ixs'] = [ 9, 257 ]
-    red['trim_disp_ixs'] = [ 25, 257 ]
-    red['shiftstretch_disp_ixs'] = [ 60, 250 ]
-    red['bg_crossdisp_ixs'] = [ 7, 17 ]
-    red['bg_disp_ixs'] = [ 50, 220 ]
+    #red['smoothing_fwhm'] = 4
+    red['crossdisp_bound_ixs'] = [ 120, 210 ]
+    red['trim_disp_ixs'] = [ 40, 262 ]
+    #red['shiftstretch_disp_ixs'] = [ 130, 240 ]
+    red['shiftstretch_disp_ixs'] = [ 70, 230 ]
+    red['bg_crossdisp_ixs'] = [ 20, 35 ]
+    red['bg_disp_ixs'] = [ 50, 230 ]
     red['discard_first_exposure'] = True
 
     # Parameters controlling the white lightcurve:
@@ -126,21 +133,22 @@ def dataset_parameters():
     # Parameters controlling the spectroscopic lightcurves:
     slc = {}
     slc['cuton_micron'] = 0.8
-    slc['npix_perbin'] = 5 
-    slc ['nchannels'] = 26 
+    slc['npix_perbin'] = 10
+    slc ['nchannels'] = 13
 
     # Parameters containing information about the transiting system:
     syspars = {}
     syspars['tr_type'] = 'primary' # 'primary' or 'secondary'
-    Rstar = 0.9*RSUN
-    syspars['RpRs'] = (1.1*RJUP)/Rstar # planet-to-star radius ratio
-    syspars['T0'] = 2454678.1234 # transit mid-time
-    syspars['P'] = 3.45 # orbital period
-    syspars['aRs'] = (0.05*AU)/Rstar # normalised semimajor axis 
-    syspars['incl'] = 89.5 # orbital inclination (degrees)
-    syspars['ecc'] = 0.0 # orbital eccentricity 
+    #syspars['tr_type'] = 'secondary' # 'primary' or 'secondary'
+    syspars['RpRs'] = (1.27*RJUP)/(0.895*RSUN) # planet-to-star radius ratio
+    syspars['T0'] = 2455342.9696 # transit mid-time
+    syspars['P'] = 4.05528047 # orbital period
+    syspars['aRs'] = (0.0486*AU)/(0.895*RSUN) # normalised semimajor axis 
+    syspars['incl'] = 87.83 # orbital inclination (degrees)
+    syspars['ecc'] = 0.0 # orbital eccentricity
     syspars['omega'] = 90. # longitude of periastron (degrees)
-    syspars['Tmid'] = syspars['T0'] # transit/eclipse mid-time
+    syspars['Tmid'] = syspars['T0'] # primary
+    #syspars['Tmid'] = syspars['T0'] + 0.5*syspars['P'] # secondary
 
     return red, wlc, slc, syspars
 
@@ -199,72 +207,9 @@ def lnprior_primary_bidirection( pars ):
     scanning mode. Hopefully this default prior will be sufficient, but
     it can be edited if necessary.
     """
-    nscandir = 2
-    # Systematics parameters for 1st scandir:
-    A_f = pars[0]
-    lniLx_f = pars[1]
-    lniLy_f = pars[2]
-    lniLz_f = pars[3]
-    c0_f = pars[4]
-    c1_f = pars[5]
-    # Systematics parameters for 2nd scandir:
-    A_r = pars[6]
-    lniLx_r = pars[7]
-    lniLy_r = pars[8]
-    lniLz_r = pars[9]
-    c0_r = pars[10]
-    c1_r = pars[11]
-    # Combine pairs of parameters:
-    A = [ A_f, A_r ]
-    lniLx = [ lniLx_f, lniLx_r ]
-    lniLy = [ lniLy_f, lniLy_r ]
-    lniLz = [ lniLz_f, lniLz_r ]
-    c0 = [ c0_f, c0_r ]
-    c1 = [ c1_f, c1_r ]
-    # Systematics parameters for shared planet parameters:
-    RpRs = pars[12]
-    delT = pars[13]
-    # Compute prior values for systematics parameters:
-    lnA = lnlniLx = lnlniLy = lnlniLz = lnc0 = lnc1 = 0
-    for i in range( nscandir ):
-        ##################################
-        # Gamma prior for A:
-        alpha = 1
-        beta = 1e2
-        if A[i]<=0:
-            lnA += -np.inf
-        else:
-            lnA += np.log( scipy.stats.gamma.pdf( A[i], alpha, loc=0, scale=1/beta ) )
-        ##################################
-        # Uniform prior for lniL:
-        low = -5
-        upp = 5
-        lnlniLx += np.log( scipy.stats.uniform.pdf( lniLx[i], loc=low, scale=upp-low ) )
-        lnlniLy += np.log( scipy.stats.uniform.pdf( lniLy[i], loc=low, scale=upp-low ) )
-        lnlniLz += np.log( scipy.stats.uniform.pdf( lniLz[i], loc=low, scale=upp-low ) )
-        ##################################
-        # Uniform prior for c0:
-        low = 0.98
-        upp = 1.02
-        lnc0 += np.log( scipy.stats.uniform.pdf( c0[i], loc=low, scale=upp-low ) )
-        ##################################
-        # Uniform prior for c1:
-        low = -1
-        upp = 1
-        lnc1 += np.log( scipy.stats.uniform.pdf( c1[i], loc=low, scale=upp-low ) )
-        ##################################
-    # Compute prior values for shared planet parameters:
-    ##################################
-    # Uniform prior for RpRs:
-    low = 1e-6
-    upp = 0.8
-    lnRpRs = np.log( scipy.stats.uniform.pdf( RpRs, loc=low, scale=upp-low ) )
-    ##################################
-    # Uniform prior for delT
-    low = -1./24.
-    upp = 1./24.
-    lndelT = np.log( scipy.stats.uniform.pdf( delT, loc=low, scale=upp-low ) )
-    return lnA + lnlniLx + lnlniLy + lnlniLz + lnc0 + lnc1 + lnRpRs + lndelT
+    # todo
+    pdb.set_trace()
+    return None
 
 def lnprior_secondary_forward( pars ):
     """
@@ -330,12 +275,11 @@ def extract_spectra( red, save_rdiff_pngs=False ):
     """
     z = prep_frames( red, save_rdiff_pngs=save_rdiff_pngs )
     jd = z[0]
-    scandirs = z[1]
-    bg_ppix = z[2]
-    ecounts2d_rlast = z[3]
-    ecounts2d_rlast_zapped = z[4]
-    ecounts2d_rdiff = z[5]
-    ecounts2d_rdiff_zapped = z[6]
+    bg_ppix = z[1]
+    ecounts2d_rlast = z[2]
+    ecounts2d_rlast_zapped = z[3]
+    ecounts2d_rdiff = z[4]
+    ecounts2d_rdiff_zapped = z[5]
     # Calculate the HST orbital phase values:
     delt = jd - jd[0]
     hstphase = np.mod( delt, HST_ORB_PERIOD_DAYS )/float( HST_ORB_PERIOD_DAYS )
@@ -344,11 +288,12 @@ def extract_spectra( red, save_rdiff_pngs=False ):
     auxvars = {}
     auxvars['jd'] = jd
     auxvars['hstphase'] = hstphase
-    auxvars['background_ppix'] = bg_ppix
+    auxvars['bg_ppix'] = bg_ppix
     f2d = [ ecounts2d_rlast, ecounts2d_rlast_zapped, ecounts2d_rdiff, ecounts2d_rdiff_zapped ]
     suffix = [ '.pkl', '.zapped.pkl' ]
     opaths = get_spectra_fpath( red )
     output = []
+    ss_disp_ixs = np.array( red['shiftstretch_disp_ixs'] )-red['ntrim_edge']
     for k in range( 4 ):
         spec = extract_spatscan_spectra( f2d[k], ap_radius=red['apradius'], cross_axis=0, \
                                          disp_axis=1, frame_axis=2 )
@@ -357,12 +302,12 @@ def extract_spectra( red, save_rdiff_pngs=False ):
         ss = calc_spectra_variations( spec['ecounts1d'], spec['ecounts1d'][0,:], \
                                       max_wavshift_pixel=2, dwav=0.001, \
                                       smoothing_fwhm=red['smoothing_fwhm'], \
-                                      disp_bound_ixs=red['shiftstretch_disp_ixs'] )
+                                      disp_bound_ixs=ss_disp_ixs )
         auxvars['x'] = np.ones( spec['cdcs'].size )
         auxvars['cdcs'] = spec['cdcs']
         auxvars['wavshift_pixels'] = ss[1]
         auxvars['wavshift_micron'] = ss[1]*pix2micron
-        outputk = { 'auxvars':auxvars, 'scandirs':scandirs, \
+        outputk = { 'auxvars':auxvars, 'background_ppix':bg_ppix, \
                     'wavsol_micron':wavsol, 'ecounts':spec['ecounts1d'] }
         ofile = open( opaths[k], 'wb' )
         pickle.dump( outputk, ofile )
@@ -411,8 +356,6 @@ def create_speclcs( z, spectra_fpath, whitefit_fpath, red ):
     shiftstretch = prep_speclcs_shiftstretch( spectra, spectra_fpath, whitefit, chixs, red )
     output = {}
     output['jd'] = basic['jd']
-    output['scanmode'] = basic['scanmode']
-    output['scandirs'] = basic['scandirs']
     output['flux_raw'] = basic['flux_raw']
     output['uncs_raw'] = basic['uncs_raw']
     output['flux_cm1'] = basic['flux_cm1']
@@ -445,7 +388,7 @@ def prep_frames( red, save_rdiff_pngs=False ):
         red['smoothing_fwhm'] = 0.0
     else:
         red['smoothing_str'] = 'smooth{0:.2f}pix'.format( red['smoothing_fwhm'] )
-    ecounts2d_rlast, ecounts2d_rdiff, tstarts, exptimes, scandirs, bg_ppix, fs = get_frames( red )
+    ecounts2d_rlast, ecounts2d_rdiff, tstarts, exptimes, bg_ppix, fs = get_frames( red )
 
     # Compute the mid-exposure times:
     mjd = tstarts + 0.5*exptimes/60./60./24.
@@ -459,7 +402,6 @@ def prep_frames( red, save_rdiff_pngs=False ):
     jd = jd[ixs]
     exptimes = exptimes[ixs]
     tstarts = tstarts[ixs]
-    scandirs = scandirs[ixs]
     bg_ppix = bg_ppix[ixs]
     ecounts2d_rlast = ecounts2d_rlast[:,:,ixs]
     ecounts2d_rdiff = ecounts2d_rdiff[:,:,ixs]
@@ -469,7 +411,7 @@ def prep_frames( red, save_rdiff_pngs=False ):
     zap_rdiff = clean_cosmic_rays( ecounts2d_rdiff, inspect_each_frame=False )
     ecounts2d_rdiff_zapped = zap_rdiff[0]
     save_reconstructed_frames( jd, ecounts2d_rdiff, red, zap_rdiff, fs, save_rdiff_pngs=save_rdiff_pngs )
-    return jd, scandirs, bg_ppix, ecounts2d_rlast, ecounts2d_rlast_zapped, ecounts2d_rdiff, ecounts2d_rdiff_zapped
+    return jd, bg_ppix, ecounts2d_rlast, ecounts2d_rlast_zapped, ecounts2d_rdiff, ecounts2d_rdiff_zapped
 
 
 def clean_cosmic_rays( ecounts2d, nsig_cull_transient=8, nsig_cull_static=10, niter=1, inspect_each_frame=False ):
@@ -775,7 +717,6 @@ def make_lc( spectra, red, dispixs=[], ld3d=False ):
     ld_nonlin = ld_coeffs['fourparam_nonlin']
     output = {}
     output['jd'] = spectra['auxvars']['jd']
-    output['scandirs'] = spectra['scandirs']
     output['flux'] = flux
     output['uncs'] = uncs
     output['cuton_micron'] = cuton_micron
@@ -795,19 +736,17 @@ def prep_speclcs_shiftstretch( spectra, spectra_fpath, whitefit, chixs, red ):
     Generates spectroscopic lightcurves using the shift+stretch method.
     """
     wavsol = spectra['wavsol_micron']
-    cullixs = whitefit['cullixs']
     white_psignal = whitefit['mle_model']['psignal']
-    if whitefit['scanmode']=='bidirection':
-        ixs = np.argsort( np.concatenate( whitefit['mle_model']['jd'] ) )
-        white_psignal = np.concatenate( white_psignal )[ixs]
+    cullixs = whitefit['cullixs']
     ecounts = spectra['ecounts'][cullixs,:]
     ixs_in = white_psignal<1
     ndat, ndisp = np.shape( ecounts )
     ixs_out = np.concatenate( [ np.arange( ixs_in[0]-10 ), np.arange( ixs_in[-1]+10, ndat ) ] )
-    refspec = np.median( ecounts[ixs_out,:] ,axis=0 )
+    refspec = np.median( ecounts[ixs_out,:], axis=0 )
+    ss_disp_ixs = np.array( red['shiftstretch_disp_ixs'] )-red['ntrim_edge']
     ss = calc_spectra_variations( ecounts, refspec, max_wavshift_pixel=2, dwav=0.001, \
                                   smoothing_fwhm=red['smoothing_fwhm'], \
-                                  disp_bound_ixs=red['shiftstretch_disp_ixs'] )
+                                  disp_bound_ixs=ss_disp_ixs )
     dspec, wavshifts, vstretches, enoise = ss
     # Normalise the residuals and uncertainties:
     for i in range( ndat ):
@@ -873,12 +812,7 @@ def prep_speclcs_basic( spectra, spectra_fpath, whitefit, chixs, red ):
     speclcs_flux_cm2 = np.zeros( [ nch, ndat ] )
     speclcs_uncs_cm2 = np.zeros( [ nch, ndat ] )
 
-    jd_base = whitefit['mle_model']['jd']
     psignal_base = whitefit['mle_model']['psignal']
-    if whitefit['scanmode']=='bidirection':
-        jd_base = np.concatenate( jd_base )
-        ixs = np.argsort( jd_base )
-        psignal_base = np.concatenate( psignal_base )[ixs]
     for i in range( nch ):
         syspars['ld'] = None
         speclcs_flux_cm1_i = speclcs_flux_raw[i,:]/whiteflux
@@ -891,8 +825,6 @@ def prep_speclcs_basic( spectra, spectra_fpath, whitefit, chixs, red ):
         speclcs_uncs_cm2[i,:] = speclcs_uncs_raw[i,:]/speclcs_flux_raw[-1,i]
     output = {}
     output['jd'] = jd[cullixs]
-    output['scanmode'] = whitefit['scanmode']
-    output['scandirs'] = whitefit['scandirs']
     output['flux_raw'] = speclcs_flux_raw
     output['uncs_raw'] = speclcs_uncs_raw
     output['flux_cm1'] = speclcs_flux_cm1
@@ -922,19 +854,17 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     if os.path.isdir( odir )==False:
         os.makedirs( odir )
 
+
     ifile = open( whitelc_fpath, 'rb' )
     whitelc = pickle.load( ifile )
     ifile.close()
     jd = whitelc['jd']
-    scandirs = whitelc['scandirs']
     cullixs = get_cullixs( jd, red['discard_first_exposure'] )#whitelc['cullixs']
     keys = [ 'jdv', 'hstphasev', 'wavshift_pixelsv', 'cdcsv' ]
     ivars = {}
     for k in keys:
         ivars[k] = whitelc['auxvars'][k][cullixs]
-    scandirs = scandirs[cullixs]
-    scanmode, forward, reverse = determine_scanmode( scandirs )
-    
+
     # White lightcurve dataset to be fit:
     jd = jd[cullixs]
     t = ( jd-np.mean( jd ) )/np.std( jd )
@@ -942,18 +872,21 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     errs = whitelc['uncs'][cullixs]
     sigw = np.median( errs )
 
-    # Initialise a batman object: TODO = THIS MAYBE SHOULD DEPEND ON THE 
-    batpar, pmodel = get_batman_object( jd, syspars, ld_type='nonlinear', ld_pars=whitelc['ld_nonlin'] )
-
-    # GP inputs for the white lightcurve fit:
-    xvec = np.column_stack( [ ivars['hstphasev'], ivars['wavshift_pixelsv'], ivars['cdcsv'] ] )
-
     # Re-specify literature epoch to time baseline of data:
     Tmidlit = syspars['Tmid']
     while Tmidlit<jd.min():
         Tmidlit += syspars['P']
     while Tmidlit>jd.max():
         Tmidlit -= syspars['P']
+
+    # Precull obviouse outliers:
+    keepixs = whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, whitelc['ld_nonlin'], nsig=5 )
+
+    # Initialise a batman object: 
+    batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=whitelc['ld_nonlin'] )
+
+    # GP inputs for the white lightcurve fit:
+    xvec = np.column_stack( [ ivars['hstphasev'], ivars['wavshift_pixelsv'], ivars['cdcsv'] ] )
 
     # Initial guesses for free parameters and Get the log-likelihood function::
     A_init = 0.001
@@ -963,32 +896,18 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     c0_init = 1
     c1_init = 0
     delT_init = 0
-    if ( scanmode=='forward' )*( syspars['tr_type']=='primary' ):
-        zfuncs = lnprior_lnlike_primary_forward( jd, t, syspars, Tmidlit, batpar )
+    if syspars['tr_type']=='primary':
+        zfuncs = lnprior_lnlike_primary( jd[keepixs], t[keepixs], syspars, red, Tmidlit, batpar )
         RpRs_init = syspars['RpRs']
         labels = [ 'A', 'lniLx', 'lniLy', 'lniLz', 'c0', 'c1', 'RpRs', 'delT' ]
         initvals = [ A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, RpRs_init, delT_init ]
         perturbs = np.array( [ 10e-6, 0.1, 0.1, 0.1, 1e-4, 1e-5, 0.01, 2./60./24. ] )
-    elif ( scanmode=='bidirection' )*( syspars['tr_type']=='primary' ):
-        zfuncs = lnprior_lnlike_primary_bidirection( jd, t, syspars, Tmidlit, batpar, forward, reverse )
-        RpRs_init = syspars['RpRs']
-        labels = [ 'A_f', 'lniLx_f', 'lniLy_f', 'lniLz_f', 'c0_f', 'c1_f', \
-                   'A_r', 'lniLx_r', 'lniLy_r', 'lniLz_r', 'c0_r', 'c1_r', \
-                   'RpRs', 'delT' ]
-        initvals = [ A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, \
-                     A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, \
-                     RpRs_init, delT_init ]
-        perturbs = np.array( [ 10e-6, 0.1, 0.1, 0.1, 1e-4, 1e-5, \
-                               10e-6, 0.1, 0.1, 0.1, 1e-4, 1e-5, \
-                               0.01, 2./60./24. ] )
-    elif ( scanmode=='forward' )*( syspars['tr_type']=='secondary' ):
-        zfuncs = lnprior_lnlike_secondary_forward( jd, t, syspars, Tmidlit, batpar )
+    elif syspars['tr_type']=='secondary':
+        zfuncs = lnprior_lnlike_secondary( jd[keepixs], t[keepixs], syspars, red, Tmidlit, batpar )
         SecDepth_init = 0.0
         labels = [ 'A', 'lniLx', 'lniLy', 'lniLz', 'c0', 'c1', 'SecDepth', 'delT' ]
         initvals = [ A_init, lniLx_init, lniLy_init, lniLz_init, c0_init, c1_init, SecDepth_init, delT_init ]
         perturbs = np.array( [ 10e-6, 0.1, 0.1, 0.1, 1e-4, 1e-5, 20e-6, 2./60./24. ] )
-    elif ( scanmode=='bidirection' )*( syspars['tr_type']=='secondary' ):
-        pdb.set_trace() # not implemented yet
     else:
         pdb.set_trace()
     lnprior = zfuncs[0]
@@ -997,15 +916,11 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     eval_meanfunc = zfuncs[3]
     neglnpost, lnpost = lnpost_func( lnprior, lnlike )    
 
-    # Run an initial MLE:
-    data = ( xvec, flux, sigw )
+    data = ( xvec[keepixs,:], flux[keepixs], sigw )
     pfit = scipy.optimize.fmin( neglnpost, initvals, args=data, maxiter=1e4, xtol=1e-4, ftol=1e-4 )
-    ndim = len( pfit )
-    print( '\nInitial MLE solution:' )
-    for i in range( ndim ):
-        print( '  {0} = {1}'.format( labels[i], pfit[i] ) )
 
     # Initial emcee burn-in to possibly locate better solution:
+    ndim = len( pfit )
     p0 = [ np.array( pfit ) + perturbs*np.random.randn( ndim ) for i in range( nwalkers ) ]
     sampler = emcee.EnsembleSampler( nwalkers, ndim, lnpost, args=data )
     print( 'Running burn-in' )
@@ -1036,12 +951,11 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     lnpost_arr = np.column_stack( lnpost_list )
     acor_arr = np.column_stack( acor_list )
     gr_arr = gelman_rubin( chains )
-    print( 'Completed.\n' )
     
     # Combined the two sets of walkers:
     chain = np.hstack( chain_list ).T
     lnpost_arr = np.concatenate( lnpost_arr )
-    
+    nsamples, npar = np.shape( chain )
     # Refine the MLE solution:
     maxix = np.argmax( lnpost_arr )
     maxpar = chain[maxix,:]
@@ -1049,7 +963,6 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     mle = {}
     gr = {}
     acor = {}
-    nsamples, npar = np.shape( chain )
     for i in range( npar ):
         mle[labels[i]] = mle_arr[i]
         gr[labels[i]] = gr_arr[i]
@@ -1063,16 +976,69 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
         syspars['FpFs'] = mle['SecDepth'] #None # todo
     else:
         pdb.set_trace()
+    thrs = ( jd-mle['Tmid'] )*24
 
-    if scanmode=='forward':
-        mle_model = mle_model_whitelc_forward( jd, flux, sigw, xvec, mle['Tmid'], mle_arr, chain, \
-                                               eval_model, eval_meanfunc, odir )
-    elif scanmode=='bidirection':
-        mle_model = mle_model_whitelc_bidirection( jd, flux, sigw, xvec, mle['Tmid'],  mle_arr, chain, \
-                                                   eval_model, eval_meanfunc, odir, forward, reverse )
-    else:
-        pdb.set_trace()
-
+    # Inspect the output:
+    xeval = xvec
+    ttrend_mle, psignal_mle, gpobj_mle = eval_model( mle_arr, xvec )
+    gpobj_mle.compute( xvec[keepixs,:], yerr=sigw )
+    resids_mleb = flux[keepixs] - ttrend_mle*psignal_mle
+    mu_mle, cov_mle = gpobj_mle.predict( resids_mleb, xeval[keepixs,:] )
+    std_mle = np.sqrt( np.diag( cov_mle ) )
+    zb_mle = ttrend_mle*psignal_mle 
+    zc_mle = zb_mle + mu_mle
+    resids_mlec = flux[keepixs] - zc_mle
+    resids_std = np.std( resids_mlec )
+    resids_scatter = resids_std/sigw
+    plt.ioff()
+    print( '\nPlotting the white lightcurve fit...' )
+    fig1 = plt.figure( figsize=[8,10] )
+    xlow = 0.12
+    ylowa = 0.55
+    ylowb = 0.25
+    ylowc = 0.05
+    axw = 0.85
+    axha = 0.42
+    axhb = 0.30
+    axhc = 0.20
+    ax1a = fig1.add_axes( [ xlow, ylowa, axw, axha ] )
+    ax1b = fig1.add_axes( [ xlow, ylowb, axw, axhb ], sharex=ax1a )
+    ax1c = fig1.add_axes( [ xlow, ylowc, axw, axhc ], sharex=ax1a )
+    ax1a.errorbar( thrs, flux, yerr=sigw, fmt='.r' )
+    ax1a.errorbar( thrs[keepixs], flux[keepixs], yerr=sigw, fmt='.k' )
+    ax1b.errorbar( thrs[keepixs], (1e6)*resids_mleb, yerr=(1e6)*sigw, fmt='.k' )
+    ax1c.errorbar( thrs[keepixs], (1e6)*resids_mlec, yerr=(1e6)*sigw, fmt='.k' )
+    ndraws = 20
+    for ix in np.random.randint( nsamples, size=ndraws ):
+        ttrend_i, psignal_i, gpobj_i = eval_model( chain[ix,:], xvec )
+        gpobj_i.compute( xvec[keepixs,:], yerr=sigw )
+        resids = flux[keepixs] - ttrend_mle*psignal_mle
+        gpsamp_i = gpobj_i.sample_conditional( resids, xeval[keepixs,:] )
+        ax1a.plot( thrs[keepixs], ttrend_mle*psignal_mle+gpsamp_i, '-y', alpha=0.3 )
+        ax1b.plot( thrs[keepixs], (1e6)*gpsamp_i, '-y', alpha=0.3 )
+    jdf = np.linspace( jd.min(), jd.max(), 500 )
+    tf = ( jdf-np.mean( jd ) )/np.std( jd )
+    thrsf = ( jdf-mle['Tmid'] )*24.
+    ttrendf, psignalf = eval_meanfunc( jdf, tf, mle_arr[4:] )
+    ax1a.plot( thrsf, ttrendf*psignalf, '-g' )
+    ax1a.plot( thrs[keepixs], zc_mle, '-b' )
+    ax1b.plot( thrs[keepixs], (1e6)*mu_mle, '-b' )
+    ax1a.fill_between( thrs[keepixs], zc_mle-std_mle, zc_mle+std_mle, color=0.8*np.ones( 3 ), zorder=0 )
+    ax1b.fill_between( thrs[keepixs], (1e6)*(mu_mle-std_mle), (1e6)*(mu_mle+std_mle), \
+                       color=0.8*np.ones( 3 ), zorder=0 )
+    ax1c.axhline( 0, zorder=0 )
+    ax1a.set_ylabel( 'relative flux' )
+    ax1b.set_ylabel( 'resids (ppm)' )
+    ax1c.set_ylabel( 'resids (ppm)' )
+    ax1c.set_xlabel( 'time-from-mid (hrs)' )
+    plt.setp( ax1a.xaxis.get_ticklabels(), visible=False )
+    plt.setp( ax1b.xaxis.get_ticklabels(), visible=False )
+    #fig1.suptitle( 'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ) )
+    fig1.text( xlow+0.5*axw, ylowa+axha+0.007, \
+               'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ), \
+               rotation=0, verticalalignment='bottom', horizontalalignment='center' )
+    opath_fig1 = os.path.join( odir, 'white_lcfit.pdf' )
+    fig1.savefig( opath_fig1 )
     # Corner plot:
     print( 'Making the corner plot...' )
     fig2 = corner.corner( chain, labels=labels )
@@ -1094,16 +1060,15 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     ofile.close()
     output = {}
     output['whitelc'] = whitelc
-    output['scanmode'] = scanmode
-    output['scandirs'] = scandirs
-    output['cullixs'] = cullixs
+    output['cullixs'] = cullixs[keepixs]
     output['syspars'] = syspars
     output['red'] = red
     output['Tmidlit'] = Tmidlit
     output['walker_chains'] = chain_list
     output['posterior_properties'] = chprops
     output['mle_vals'] = mle
-    output['mle_model'] = mle_model
+    output['mle_model'] = { 'psignal':psignal_mle, 'ttrend':ttrend_mle, 'systematics':mu_mle, \
+                            'jdf':jdf, 'psignalf':psignalf, 'ttrendf':ttrendf }
     output['grs'] = gr
     output['acor'] = acor
     ofile = open( opath_mcmc, 'wb' )
@@ -1115,160 +1080,11 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     pickle.dump( output, ofile )
     ofile.close()
     
-    print( '\nSaved:\n{0}\n{1}\n{2}\n{3}\n'\
-           .format( opath_mcmc, opath_mle, opath_txt, opath_fig2 ) )
+    print( '\nSaved:\n{0}\n{1}\n{2}\n{3}\n{4}\n'\
+           .format( opath_mcmc, opath_mle, opath_txt, opath_fig1, opath_fig2 ) )
     plt.ion()
 
     return opath_txt, opath_mcmc, opath_mle
-
-
-def mle_model_whitelc_forward( jd, flux, sigw, xvec, Tmid, mle_arr, chain, eval_model, eval_meanfunc, odir ):
-    thrs = ( jd-Tmid )*24
-    nsamples, npar = np.shape( chain )
-    xeval = xvec
-    ttrend_mle, psignal_mle, gpobj_mle = eval_model( mle_arr, xvec )
-    gpobj_mle.compute( xvec, yerr=sigw )
-    resids_mleb = flux - ttrend_mle*psignal_mle
-    mu_mle, cov_mle = gpobj_mle.predict( resids_mleb, xeval )
-    std_mle = np.sqrt( np.diag( cov_mle ) )
-    zb_mle = ttrend_mle*psignal_mle 
-    zc_mle = zb_mle + mu_mle
-    resids_mlec = flux - zc_mle
-    resids_std = np.std( resids_mlec )
-    resids_scatter = resids_std/sigw
-    plt.ioff()
-    print( '\nPlotting the white lightcurve fit...' )
-    fig1 = plt.figure( figsize=[8,10] )
-    ax1a = fig1.add_axes( [ 0.12, 0.55, 0.85, 0.42 ] )
-    ax1b = fig1.add_axes( [ 0.12, 0.25, 0.85, 0.30 ], sharex=ax1a )
-    ax1c = fig1.add_axes( [ 0.12, 0.05, 0.85, 0.20 ], sharex=ax1a )
-    ax1a.errorbar( thrs, flux, yerr=sigw, fmt='.k' )
-    ax1b.errorbar( thrs, (1e6)*resids_mleb, yerr=(1e6)*sigw, fmt='.k' )
-    ax1c.errorbar( thrs, (1e6)*resids_mlec, yerr=(1e6)*sigw, fmt='.k' )
-    ndraws = 20
-    for ix in np.random.randint( nsamples, size=ndraws ):
-        ttrend_i, psignal_i, gpobj_i = eval_model( chain[ix,:] )
-        gpobj_i.compute( xvec, yerr=sigw )
-        resids = flux - ttrend_mle*psignal_mle
-        gpsamp_i = gpobj_i.sample_conditional( resids, xeval )
-        ax1a.plot( thrs, ttrend_mle*psignal_mle+gpsamp_i, '-r', alpha=0.3 )
-        ax1b.plot( thrs, (1e6)*gpsamp_i, '-r', alpha=0.3 )
-    jdf = np.linspace( jd.min(), jd.max(), 500 )
-    tf = ( jdf-np.mean( jd ) )/np.std( jd )
-    thrsf = ( jdf-Tmid )*24.
-    ttrendf, psignalf = eval_meanfunc( jdf, tf, mle_arr[4:] )
-    ax1a.plot( thrsf, ttrendf*psignalf, '-g' )
-    ax1a.plot( thrs, zc_mle, '-b' )
-    ax1b.plot( thrs, (1e6)*mu_mle, '-b' )
-    ax1a.fill_between( thrs, zc_mle-std_mle, zc_mle+std_mle, color=0.8*np.ones( 3 ), zorder=0 )
-    ax1b.fill_between( thrs, (1e6)*(mu_mle-std_mle), (1e6)*(mu_mle+std_mle), color=0.8*np.ones( 3 ), zorder=0 )
-    ax1c.axhline( 0, zorder=0 )
-    ax1a.set_ylabel( 'relative flux' )
-    ax1b.set_ylabel( 'resids (ppm)' )
-    ax1c.set_ylabel( 'resids (ppm)' )
-    ax1c.set_xlabel( 'time-from-mid (hrs)' )
-    plt.setp( ax1a.xaxis.get_ticklabels(), visible=False )
-    plt.setp( ax1b.xaxis.get_ticklabels(), visible=False )
-    fig1.suptitle( 'Scatter in residuals = {0:.3f} x photon noise'.format( resids_scatter ) )
-    opath_fig1 = os.path.join( odir, 'white_lcfit.pdf' )
-    fig1.savefig( opath_fig1 )
-    mle_model = { 'psignal':psignal_mle, 'ttrend':ttrend_mle, 'systematics':mu_mle, 'jd':jd, 'thrs':thrs, \
-                  'jdf':jdf, 'thrsf':thrsf, 'psignalf':psignalf, 'ttrendf':ttrendf }
-    return mle_model
-
-
-def mle_model_whitelc_bidirection( jd, flux, sigw, xvec, Tmid, mle_arr, chain, \
-                                   eval_model, eval_meanfunc, odir, forward, reverse ):
-    thrs = ( jd-Tmid )*24
-    nsamples, npar = np.shape( chain )
-    A_f, lniLx_f, lniLy_f, lniLz_f, c0_f, c1_f = mle_arr[:6] # forward-scan systematics
-    A_r, lniLx_r, lniLy_r, lniLz_r, c0_r, c1_r = mle_arr[6:12] # reverse-scan systematics
-    RpRs, delT = mle_arr[12:] # planet signal
-    meanpars_f = [ c0_f, c1_f, RpRs, delT ]
-    meanpars_r = [ c0_r, c1_r, RpRs, delT ]
-    xeval = xvec
-    ttrend_f, ttrend_r, psignal_f, psignal_r, gpobj_f, gpobj_r = eval_model( mle_arr )
-    print( '\nPlotting the white lightcurve fit...' )
-    fig1 = plt.figure( figsize=[12,10] )
-    ax1a_f = fig1.add_axes( [ 0.12, 0.55, 0.4, 0.42 ] )
-    ax1b_f = fig1.add_axes( [ 0.12, 0.25, 0.4, 0.30 ], sharex=ax1a_f )
-    ax1c_f = fig1.add_axes( [ 0.12, 0.05, 0.4, 0.20 ], sharex=ax1a_f )
-    ax1a_r = fig1.add_axes( [ 0.12+0.45, 0.55, 0.4, 0.42 ], sharex=ax1a_f )
-    ax1b_r = fig1.add_axes( [ 0.12+0.45, 0.25, 0.4, 0.30 ], sharex=ax1a_f )
-    ax1c_r = fig1.add_axes( [ 0.12+0.45, 0.05, 0.4, 0.20 ], sharex=ax1a_f )
-    axs = [ [ ax1a_f, ax1b_f, ax1c_f ], [ ax1a_r, ax1b_r, ax1c_r ] ]
-    ttrend = [ ttrend_f, ttrend_r ]
-    psignal = [ psignal_f, psignal_r ]
-    gpobj = [ gpobj_f, gpobj_r ]
-    meanpars = [ meanpars_f, meanpars_r ]
-    ixs = [ forward, reverse ]
-    ndirect = 2
-    mu = []
-    jd = [ jd[ixs[0]], jd[ixs[1]] ]
-    thrs = [ thrs[ixs[0]], thrs[ixs[1]] ]
-    jdf = []
-    tf = []
-    thrsf = []
-    ttrendf = []
-    psignalf = []
-    for i in range( ndirect ):
-        gpobj[i].compute( xvec[ixs[i],:], yerr=sigw )
-        residsb_i = flux[ixs[i]] - ttrend[i]*psignal[i]
-        mu_i, cov_i = gpobj[i].predict( residsb_i, xeval[ixs[i],:] )
-        std_i = np.sqrt( np.diag( cov_i ) )
-        zb_i = ttrend[i]*psignal[i]
-        zc_i = zb_i + mu_i
-        residsc_i = flux[ixs[i]] - zc_i
-        residsc_std_i = np.std( residsc_i )
-        residsc_scatter_i = residsc_std_i/sigw
-        plt.ioff()
-        axs[i][0].errorbar( thrs[i], flux[ixs[i]], yerr=sigw, fmt='.k' )
-        axs[i][1].errorbar( thrs[i], (1e6)*residsb_i, yerr=(1e6)*sigw, fmt='.k' )
-        axs[i][2].errorbar( thrs[i], (1e6)*residsc_i, yerr=(1e6)*sigw, fmt='.k' )
-        ndraws = 20
-        for ix in np.random.randint( nsamples, size=ndraws ):
-            ttrend_fi, ttrend_ri, psignal_fi, psignal_ri, gpobj_fi, gpobj_ri = eval_model( chain[ix,:] )
-            gpobj_i = [ gpobj_fi, gpobj_ri ][i]
-            gpobj_i.compute( xvec[ixs[i],:], yerr=sigw )
-            resids_i = flux[ixs[i]] - ttrend[i]*psignal[i]
-            gpsamp_i = gpobj_i.sample_conditional( resids_i, xeval[ixs[i],:] )
-            axs[i][0].plot( thrs[i], ttrend[i]*psignal[i]+gpsamp_i, '-r', alpha=0.3 )
-            axs[i][1].plot( thrs[i], (1e6)*gpsamp_i, '-r', alpha=0.3 )
-        jdf_i = np.linspace( jd[i].min(), jd[i].max(), 500 )
-        tf_i = ( jdf_i-np.mean( jd[i] ) )/np.std( jd[i] )
-        thrsf_i = ( jdf_i-Tmid )*24.
-        ttrendf_i, psignalf_i = eval_meanfunc( jdf_i, tf_i, meanpars[i] )
-        axs[i][0].plot( thrsf_i, ttrendf_i*psignalf_i, '-g' )
-        axs[i][0].plot( thrs[i], zc_i, '-b' )
-        axs[i][1].plot( thrs[i], (1e6)*mu_i, '-b' )
-        axs[i][0].fill_between( thrs[i], zc_i-std_i, zc_i+std_i, color=0.8*np.ones( 3 ), zorder=0 )
-        axs[i][1].fill_between( thrs[i], (1e6)*(mu_i-std_i), (1e6)*(mu_i+std_i), \
-                                color=0.8*np.ones( 3 ), zorder=0 )
-        axs[i][2].axhline( 0, zorder=0 )
-        axs[i][0].set_title( 'Scatter in residuals = {0:.3f} x photon noise'.format( residsc_scatter_i ) )
-        mu += [ mu_i ]
-        jdf += [ jdf_i ]
-        tf += [ tf_i ]
-        thrsf += [ thrsf_i ]
-        ttrendf += [ ttrendf_i ]
-        psignalf += [ psignalf_i ]
-    ax1a_f.set_ylabel( 'relative flux' )
-    ax1b_f.set_ylabel( 'resids (ppm)' )
-    ax1c_f.set_ylabel( 'resids (ppm)' )
-    ax1c_f.set_xlabel( 'time-from-mid (hrs)' )
-    ax1c_r.set_xlabel( 'time-from-mid (hrs)' )
-    for ax in [ ax1a_f, ax1b_f, ax1a_r, ax1b_r ]:
-        plt.setp( ax.xaxis.get_ticklabels(), visible=False )
-    for ax in [ ax1a_r, ax1b_r, ax1c_r ]:
-        plt.setp( ax.yaxis.get_ticklabels(), visible=False )
-
-    opath_fig1 = os.path.join( odir, 'white_lcfit.pdf' )
-    fig1.savefig( opath_fig1 )
-    print( 'Saved: {0}'.format( opath_fig1 ) )
-    mle_model = { 'psignal':psignal, 'ttrend':ttrend, 'systematics':mu, 'jd':jd, 'thrs':thrs, \
-                  'jdf':jdf, 'thrsf':thrsf, 'psignalf':psignalf, 'ttrendf':ttrendf }
-    return mle_model
-
 
 
 def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
@@ -1279,7 +1095,6 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     using GPs or MCMC. Hopefully this is useful for providing an initial indication
     of the quality and content of a given dataset.
     """
-
     ifile = open( whitemle_fpath, 'rb' )
     whitemle = pickle.load( ifile )
     ifile.close()
@@ -1287,8 +1102,6 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     speclcs = pickle.load( ifile )
     ifile.close()
 
-    scandirs = whitemle['scandirs']
-    scanmode, forward, reverse = determine_scanmode( scandirs )
     syspars = whitemle['syspars']
     jd = speclcs['jd']
     tv = speclcs['auxvars']['jdv']
@@ -1303,7 +1116,6 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     uncs_ss = speclcs['uncs_ss']
     flux = [ flux_raw, flux_cm1, flux_cm2, flux_ss ]
     uncs = [ uncs_raw, uncs_cm1, uncs_cm2, uncs_ss ]
-
     nch, ndat = flux_ss.shape
     ntypes = len( flux )
     psignal = []
@@ -1313,6 +1125,7 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     psignalf = []
     ttrendf = []
     
+    trspec_fpaths, trspec_figpath = get_trspec_fpaths( speclcs_fpath )
     wavc = np.mean( speclcs['wavedges'], axis=1 )
     RpRs_vals = np.zeros( [ nch, ntypes ] )
     RpRs_uncs = np.zeros( [ nch, ntypes ] )
@@ -1321,85 +1134,46 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
         ttrendk = np.zeros( [ ndat, nch ] )
         psignalfk = np.zeros( [ nf, nch ] )
         ttrendfk = np.zeros( [ nf, nch ] )
-        print( '' )
         for i in range( nch ):
             fluxki = flux[k][i,:]
             uncski = uncs[k][i,:]
             ldi = speclcs['ld_nonlin'][i,:]
             batpar, pmodel = get_batman_object( jd, syspars, ld_type='nonlinear', ld_pars=ldi )
-            if scanmode=='forward':
-                model_func_ttrend, initvals = speclcs_ttrend_forward( tv, whitemle, pmodel, batpar, syspars )
-            elif scanmode=='bidirection':
-                model_func_ttrend, initvals = speclcs_ttrend_bidirection( tv, whitemle, pmodel, batpar, \
-                                                                          syspars, forward, reverse )
+            if syspars['tr_type']=='primary':
+                initvals = [ 1, 0, whitemle['mle_vals']['RpRs'] ]
+                batpar.t0 = whitemle['mle_vals']['Tmid']
+                def model_func_ttrend( jd, c0, c1, RpRs ):
+                    ttrend = c0 + c1*tv
+                    batpar.rp = RpRs
+                    psignal = pmodel.light_curve( batpar )
+                    return ttrend*psignal
+            elif syspars['tr_type']=='secondary':
+                initvals = [ 1, 0, whitemle['mle_vals']['SecDepth'] ]
+                batpar.t_secondary = whitemle['mle_vals']['Tmid']
+                def model_func_ttrend( jd, c0, c1, SecDepth ):
+                    ttrend = c0 + c1*tv
+                    batpar.fp = SecDepth
+                    psignal = pmodel.light_curve( batpar )
+                    return ttrend*psignal
             else:
                 pdb.set_trace()
             pfit = scipy.optimize.curve_fit( model_func_ttrend, jd, fluxki, p0=initvals, \
                                              sigma=uncski, absolute_sigma=True )
-            RpRs_val = pfit[0][-1]
-            RpRs_unc = np.sqrt( np.diag( pfit[1] ) )[-1]
+            c0_val, c1_val, RpRs_val = pfit[0]
+            c0_unc, c1_unc, RpRs_unc = np.sqrt( np.diag( pfit[1] ) )
             RpRs_vals[i,k] = RpRs_val
             RpRs_uncs[i,k] = RpRs_unc
-            print( 'Analysis {0:.0f}. Lightcurve {1:.0f}. fitval = {2}'.format( k+1, i+1, pfit[0][-1] ) )
+            print( k,i )
+        trspec = np.column_stack( [ wavc, RpRs_vals[:,k], RpRs_uncs[:,k] ] )
+        np.savetxt( trspec_fpaths[k], trspec )
     plt.figure()
     doff = 0.1*np.median( np.diff( wavc ) )
     for k in range( ntypes ):
         plt.errorbar( wavc+k*doff, RpRs_vals[:,k], yerr=RpRs_uncs[:,k], fmt='.-', label=labels[k] )
     plt.legend()
-    return wavc, RpRs_vals, RpRs_uncs
+    plt.savefig( trspec_figpath )
 
-def speclcs_ttrend_forward( tv, whitemle, pmodel, batpar, syspars ):
-    if syspars['tr_type']=='primary':
-        initvals = [ 1, 0, whitemle['mle_vals']['RpRs'] ]
-        batpar.t0 = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0, c1, RpRs ):
-            ttrend = c0 + c1*tv
-            batpar.rp = RpRs
-            psignal = pmodel.light_curve( batpar )
-            return ttrend*psignal
-    elif syspars['tr_type']=='secondary':
-        initvals = [ 1, 0, whitemle['mle_vals']['SecDepth'] ]
-        batpar.t_secondary = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0, c1, SecDepth ):
-            ttrend = c0 + c1*tv
-            batpar.fp = SecDepth
-            psignal = pmodel.light_curve( batpar )
-            return ttrend*psignal
-    else:
-        pdb.set_trace() # error with tr_type specification
-    return model_func_ttrend, initvals
-
-def speclcs_ttrend_bidirection( tv, whitemle, pmodel, batpar, syspars, forward, reverse ):
-    tv_f = tv[forward]
-    tv_r = tv[reverse]
-    ixs = np.argsort( np.concatenate( [ tv_f, tv_r ] ) )
-    if syspars['tr_type']=='primary':
-        initvals = [ 1, 0, 1, 0, whitemle['mle_vals']['RpRs'] ]
-        batpar.t0 = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0_f, c1_f, c0_r, c1_r, RpRs ):
-            ttrend_f = c0_f + c1_f*tv[forward]
-            ttrend_r = c0_r + c1_r*tv[reverse]
-            batpar.rp = RpRs
-            psignal = pmodel.light_curve( batpar )
-            model_f = ttrend_f*psignal[forward]
-            model_r = ttrend_r*psignal[reverse]
-            y = np.concatenate( [ model_f, model_r ] )[ixs]
-            return y
-    elif syspars['tr_type']=='secondary':
-        initvals = [ 1, 0, 1, 0, whitemle['mle_vals']['SecDepth'] ]
-        batpar.t_secondary = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0_f, c1_f, c0_r, c1_r, SecDepth ):
-            ttrend_f = c0_f + c1_f*tv[forward]
-            ttrend_r = c0_r + c1_r*tv[reverse]
-            batpar.fp = SecDepth
-            psignal = pmodel.light_curve( batpar )
-            model_f = ttrend_f*psignal[forward]
-            model_r = ttrend_r*psignal[reverse]
-            y = np.concatenate( [ model_f, model_r ] )[ixs]
-            return y
-    else:
-        pdb.set_trace() # error with tr_type specification
-    return model_func_ttrend, initvals
+    return trspec_fpaths
 
 #################################################################################
 # Likelihood functions.
@@ -1408,12 +1182,19 @@ def speclcs_ttrend_bidirection( tv, whitemle, pmodel, batpar, syspars, forward, 
 # appropriate for the dataset under consideration, but in practice this is hopefully
 # not required for the initial quicklook of the transmission/emission spectrum.
 
-def lnprior_lnlike_primary_forward( jd, t, syspars, Tmidlit, batpar ):
+def lnprior_lnlike_primary( jd, t, syspars, red, Tmidlit, batpar ):
     """
     Defines the prior and data likelihood for a primary transit model.
     """
-    lnprior = lnprior_primary_forward
-    def eval_model_primary( pars ):
+    # First, specify the appropriate prior function according
+    # to the scan mode used to acquire the data:
+    if red['scanmode']=='forward':
+        lnprior = lnprior_primary_forward
+    elif red['scanmode']=='bidirection':
+        lnprior = lnprior_primary_bidirection
+    else:
+        pdb.set_trace()    
+    def eval_model_primary( pars, x ):
         A, lniLx, lniLy, lniLz, c0, c1, RpRs, delT = pars
         ttrend, psignal = eval_meanfunc_primary( jd, t, [ c0, c1, RpRs, delT ] )
         A2 = A**2.
@@ -1440,61 +1221,18 @@ def lnprior_lnlike_primary_forward( jd, t, syspars, Tmidlit, batpar ):
         return gpobj.lnlikelihood( resids, quiet=True )
     return lnprior, lnlike, eval_model_primary, eval_meanfunc_primary
 
-def lnprior_lnlike_primary_bidirection( jd, t, syspars, Tmidlit, batpar, forward, reverse ):
+def lnprior_lnlike_secondary( jd, t, syspars, red, Tmidlit, batpar ):
     """
     Defines the prior and data likelihood for a primary transit model.
     """
-    lnprior = lnprior_primary_bidirection
-    def eval_model_primary( pars ):
-        # Unpack the parameters:
-        A_f, lniLx_f, lniLy_f, lniLz_f, c0_f, c1_f = pars[:6] # forward-scan systematics
-        A_r, lniLx_r, lniLy_r, lniLz_r, c0_r, c1_r = pars[6:12] # reverse-scan systematics
-        RpRs, delT = pars[12:] # planet signal
-        # Evaluate the forward-scan components:
-        ttrend_f, psignal_f = eval_meanfunc_primary( jd[forward], t[forward], [ c0_f, c1_f, RpRs, delT ] )
-        A2_f = A_f**2.
-        lniL_f = np.array( [ lniLx_f, lniLy_f, lniLz_f ] )
-        L2_f = ( 1./np.exp( lniL_f ) )**2.
-        kernel_f = A2_f*george.kernels.Matern32Kernel( L2_f, ndim=L2_f.size )
-        gpobj_f = george.GP( kernel_f )
-        # Evaluate the reverse-scan components:
-        ttrend_r, psignal_r = eval_meanfunc_primary( jd[reverse], t[reverse], [ c0_r, c1_r, RpRs, delT ] )
-        A2_r = A_r**2.
-        lniL_r = np.array( [ lniLx_r, lniLy_r, lniLz_r ] )
-        L2_r = ( 1./np.exp( lniL_r ) )**2.
-        kernel_r = A2_r*george.kernels.Matern32Kernel( L2_r, ndim=L2_r.size )
-        gpobj_r = george.GP( kernel_r )
-        return ttrend_f, ttrend_r, psignal_f, psignal_r, gpobj_f, gpobj_r
-    def eval_meanfunc_primary( jd, t, pars ):
-        c0, c1, RpRs, delT = pars
-        ttrend = c0 + c1*t
-        batpar.t0 = Tmidlit + delT
-        batpar.rp = RpRs
-        pmodel = batman.TransitModel( batpar, jd, fac=0.02, transittype='primary' )
-        psignal = pmodel.light_curve( batpar )        
-        return ttrend, psignal
-    def lnlike( pars, x, y, e ):
-        """
-        Log( data likelihood ) function
-        """
-        ttrend_f, ttrend_r, psignal_f, psignal_r, gpobj_f, gpobj_r = eval_model_primary( pars )
-        # Compute log-likelihood for the forward scan:
-        gpobj_f.compute( x[forward,:], yerr=e )
-        resids_f = y[forward] - ttrend_f*psignal_f
-        lnlike_f = gpobj_f.lnlikelihood( resids_f, quiet=True )
-        # Compute log-likelihood for the reverse scan:
-        gpobj_r.compute( x[reverse,:], yerr=e )
-        resids_r = y[reverse] - ttrend_r*psignal_r
-        lnlike_r = gpobj_r.lnlikelihood( resids_r, quiet=True )
-        return lnlike_f+lnlike_r
-    return lnprior, lnlike, eval_model_primary, eval_meanfunc_primary
-
-
-def lnprior_lnlike_secondary_forward( jd, t, syspars, scanmode, Tmidlit, batpar ):
-    """
-    Defines the prior and data likelihood for a primary transit model.
-    """
-    lnprior = lnprior_secondary_forward
+    # First, specify the appropriate prior function according
+    # to the scan mode used to acquire the data:
+    if red['scanmode']=='forward':
+        lnprior = lnprior_secondary_forward
+    elif red['scanmode']=='bidirection':
+        lnprior = lnprior_secondary_bidirection
+    else:
+        pdb.set_trace()    
     def eval_model_secondary( pars, x ):
         """
         
@@ -1527,7 +1265,7 @@ def lnprior_lnlike_secondary_forward( jd, t, syspars, scanmode, Tmidlit, batpar 
 
 def lnpost_func( lnprior, lnlike ):
     """
-    Defines the model posterior to be marginalised over.
+    Defines the model posterior to be marginalised over.   
     """
     def lnpost( pars, x, y, e ):
         l1 = lnprior( pars )
@@ -1886,19 +1624,6 @@ def read_atlas_grid( model_filepath=None, teff=None, logg=None, new_grid=False )
 #################################################################################
 # Utility routines.
 
-def determine_scanmode( scandirs ):
-    forward = ( scandirs==1 )
-    reverse = ( scandirs==-1 )
-    if ( forward.max()==True )*( reverse.max()==True ):
-        scanmode = 'bidirection'
-    elif ( forward.max()==True  )*( reverse.max()==False ):
-        scanmode = 'forward'
-    elif ( forward.max()==False  )*( reverse.max()==True ):
-        scanmode = 'reverse'
-    else:
-        pdb.set_trace() # this shouldn't happen
-    return scanmode, forward, reverse
-
 def plot_basic_timeseries( z, red ):
     plt.ioff()
     fig = plt.figure( figsize=[12,8] )
@@ -1915,7 +1640,7 @@ def plot_basic_timeseries( z, red ):
     for k in range( 4 ):
         jd = z[k]['auxvars']['jd']
         flux = np.sum( z[k]['ecounts'], axis=1 )
-        bgppix = z[k]['auxvars']['background_ppix']
+        bgppix = z[k]['background_ppix']
         hstphase =  z[k]['auxvars']['hstphase']
         wavshift =  z[k]['auxvars']['wavshift_pixels']
         cdcs =  z[k]['auxvars']['cdcs']
@@ -1933,6 +1658,38 @@ def plot_basic_timeseries( z, red ):
     fig.savefig( opath )
     plt.ion()
     return opath
+
+def whitelc_precull_primary( jd, flux, errs, syspars, t, ivars, Tmidlit, nonlin_ld_pars, nsig=5 ):
+    phi = ivars['hstphasev']
+    ndat = flux.size
+    offset = np.ones( ndat )
+    keepixs = np.arange( ndat )
+    niter = 2
+    for k in range( niter ):
+        batpar, pmodel = get_batman_object( jd[keepixs], syspars, ld_type='nonlinear', ld_pars=nonlin_ld_pars )
+        C = np.column_stack( [ offset, phi, phi**2., phi**3., phi**4., t ] )[keepixs,:]
+        def model_func( jd, c0, c1, c2, c3, c4, c5, RpRs, delT ):
+            b = np.array( [ c0, c1, c2, c3, c4, c5 ] )
+            ptrend = np.dot( C, b )
+            batpar.t0 = Tmidlit + delT
+            batpar.rp = RpRs
+            pmodel = batman.TransitModel( batpar, jd, fac=0.02, transittype='primary' )
+            psignal = pmodel.light_curve( batpar )
+            return ptrend*psignal
+        initvals = [ 1, 0, 0, 0, 0, 0, syspars['RpRs'], 0 ]
+        pfit = scipy.optimize.curve_fit( model_func, jd[keepixs], flux[keepixs], \
+                                         p0=initvals, sigma=errs[keepixs], absolute_sigma=True )
+        c0, c1, c2, c3, c4, c5, RpRs, delT = pfit[0]
+        b = np.array( [ c0, c1, c2, c3, c4, c5 ] )
+        ptrend = np.dot( C, b )
+        batpar.t0 = Tmidlit + delT
+        batpar.rp = RpRs
+        pmodel = batman.TransitModel( batpar, jd[keepixs], fac=0.02, transittype='primary' )
+        psignal = pmodel.light_curve( batpar )
+        resids_nsig = np.abs( ( flux[keepixs]-ptrend*psignal )/errs[keepixs] )
+        ixs = ( resids_nsig<=nsig )
+        keepixs = keepixs[ixs]
+    return keepixs
 
 def get_batman_object( jd, syspars, ld_type=None, ld_pars=[] ):
     # Define the batman planet object:
@@ -1979,6 +1736,21 @@ def get_speclcs_fpath( spectra_fpath ):
     oname = os.path.basename( spectra_fpath ).replace( 'spectra.', 'speclcs.' )
     opath = os.path.join( odir, oname )
     return opath
+
+def get_trspec_fpaths( speclcs_fpath ):
+    odir = os.path.join( os.getcwd(), 'results' )
+    onames = []
+    onames += [ os.path.basename( speclcs_fpath ).replace( 'speclcs.', 'trspec_raw.' ) ]
+    onames += [ os.path.basename( speclcs_fpath ).replace( 'speclcs.', 'trspec_cm1.' ) ]
+    onames += [ os.path.basename( speclcs_fpath ).replace( 'speclcs.', 'trspec_cm2.' ) ]
+    onames += [ os.path.basename( speclcs_fpath ).replace( 'speclcs.', 'trspec_ss.' ) ]
+    opaths = []
+    for i in onames: 
+        opathi = os.path.join( odir, i )
+        opaths += [ opathi.replace( '.pkl', '.txt' ) ]
+    ofigpath = opaths[0].replace( 'trspec_raw.', 'trspec.' )
+    ofigpath = ofigpath.replace( '.txt', '.pdf' )
+    return opaths, ofigpath
 
 def get_whitelc_fpath( spectra_fpath ):
     ofilename = os.path.basename( spectra_fpath ).replace( 'spectra.', 'whitelc.' )
@@ -2125,7 +1897,7 @@ def get_frames( red ):
     bgd_ixs = np.array( red['bg_disp_ixs'] )-ntrim
     if red['config']=='G141':
         filter_str = 'G141'
-    if red['config']=='G102':
+    elif red['config']=='G102':
         filter_str = 'G102'
     else:
         pdb.set_trace()
@@ -2137,6 +1909,9 @@ def get_frames( red ):
     search_str = os.path.join( ddir, '*_ima.fits' )
     fs = np.array( glob.glob( search_str ), dtype=str )
     nframes = len( fs) 
+    if nframes==0:
+        print( '\nNo data frames found!\nsearch_str={0}\n'.format( search_str ) )
+        pdb.set_trace()
     tstarts = []
     exptimes = []
     ecounts2d_rlast = [] # ecounts extracted from the last read
@@ -2145,7 +1920,6 @@ def get_frames( red ):
     v = []
     bg_ppix_first_arr = []
     bg_ppix_last_arr = []
-    scandirs = []
     for i in range( nframes ):
         hdu = pyfits.open( fs[i] )
         header0 = hdu[0].header
@@ -2157,10 +1931,6 @@ def get_frames( red ):
             header1 = hdu[1].header
             frame = hdu[1].data[ntrim:-ntrim,ntrim:-ntrim]
             nscan, ndisp = np.shape( frame )
-            c1 = max( [ 0, c1 ] )
-            c2 = min( [ nscan, c2 ] )
-            d1 = max( [ 0, d1 ] )
-            d2 = min( [ ndisp, d2 ] )
             abs_m += [ np.abs( header1['LTM1_1'] ) ]
             v += [ header1['LTV1'] ]
             tstart = header0['EXPSTART']
@@ -2175,19 +1945,18 @@ def get_frames( red ):
             last_read = hdu[1].data[ntrim:-ntrim,ntrim:-ntrim]
             sampt_first = hdu[ix0].header['SAMPTIME']
             sampt_last = hdu[1].header['SAMPTIME']
-            if hdu[1].header['BUNIT'].lower()=='electrons':
+            if red['count_units']=='electrons':
                 # units are electrons for more recent datasets
                 first_read_ecounts = first_read 
                 last_read_ecounts = last_read # units now electrons
-            elif hdu[1].header['BUNIT'].lower()=='electrons/s':
+            elif red['count_units']=='electrons_per_second':
                 # units used to be electrons/sec
                 first_read_ecounts = first_read*sampt_first 
                 last_read_ecounts = last_read*sampt_last
             else:
                 pdb.set_trace()
             # Estimate the background in e/pixel for the first read and remove it:
-            bg_box = [ max( [ bgcd_ixs[0], 0 ] ), min( [ bgcd_ixs[1], nscan ] ), \
-                       max( [ bgd_ixs[0], 0 ] ), min( [ bgd_ixs[1], ndisp ] ) ]
+            bg_box = [ bgcd_ixs[0], bgcd_ixs[1], bgd_ixs[0], bgd_ixs[1] ]
             bg_ppix_first = np.median( first_read_ecounts[bg_box[0]:bg_box[1],bg_box[2]:bg_box[3]] )
             first_read_ecounts -= bg_ppix_first
             bg_ppix_last = np.median( last_read_ecounts[bg_box[0]:bg_box[1],bg_box[2]:bg_box[3]] )
@@ -2197,7 +1966,6 @@ def get_frames( red ):
             # Build up the differences between reads:
             ndiffs = nreads-1
             rdiff_ecounts = np.zeros( [ nscan, ndisp, ndiffs ] )
-            rdiff_cscans = np.zeros( ndiffs )
             for j in range( ndiffs ):
                 # First read:
                 ix1 = 1+(nreads-1)*5-j*5
@@ -2208,10 +1976,10 @@ def get_frames( red ):
                 read2 = hdu[ix2].data[ntrim:-ntrim,ntrim:-ntrim]#[c1:c2+1,d1:d2+1]
                 sampt2 = hdu[ix2].header['SAMPTIME']
                 # Get as electrons:
-                if hdu[1].header['BUNIT'].lower()=='electrons':
+                if red['count_units']=='electrons':
                     ecounts1 = read1
                     ecounts2 = read2
-                elif hdu[1].header['BUNIT'].lower()=='electrons/s':
+                elif red['count_units']=='electrons_per_second':
                     ecounts1 = read1*sampt1
                     ecounts2 = read2*sampt2
                 else:
@@ -2224,7 +1992,7 @@ def get_frames( red ):
                 bg2 = np.median( ecounts2[bg_box[0]:bg_box[1],bg_box[2]:bg_box[3]] )
                 ecounts2 -= bg2
                 rdiff_ecounts[:,:,j] = ecounts2 - ecounts1
-
+                
                 # Estimate the center of the scan for purpose of applying mask:
                 x = np.arange( nscan )[c1:c2+1]
                 ninterp = 1000
@@ -2240,12 +2008,6 @@ def get_frames( red ):
                 ixu = int( np.ceil( cscan + maskradius ) )
                 rdiff_ecounts[:ixl+1,:,j] = 0.0
                 rdiff_ecounts[ixu:,:,j] = 0.0
-                rdiff_cscans[j] = cscan
-            dscan = rdiff_cscans[-1]-rdiff_cscans[0]
-            if dscan>0:
-                scandirs += [ +1 ]
-            else:
-                scandirs += [ -1 ]
             # Construct the final scan, noting that first_read_electrons should
             # already be background-subtracted:
             ecounts_per_read = np.dstack( [ first_read_ecounts, rdiff_ecounts ] )
@@ -2259,10 +2021,9 @@ def get_frames( red ):
     ecounts2d_rlast = np.dstack( ecounts2d_rlast )
     ecounts2d_rdiff = np.dstack( ecounts2d_rdiff )
     tstarts = np.array( tstarts )
-    scandirs = np.array( scandirs )
     exptimes = np.array( exptimes )
     bg_ppix = np.array( bg_ppix_last_arr )
-    return ecounts2d_rlast, ecounts2d_rdiff, tstarts, exptimes, scandirs, bg_ppix, fs
+    return ecounts2d_rlast, ecounts2d_rdiff, tstarts, exptimes, bg_ppix, fs
 
 def discard_first_orbit_ixs( jd ):
     nframes = len( jd )
