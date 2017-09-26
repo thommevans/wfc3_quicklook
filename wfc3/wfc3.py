@@ -34,7 +34,7 @@ RJUP = 7.149e7
 #################################################################################
 # Wrapper for running pipeline.
 
-def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
+def main( switches={ 'extract_spectra':True, 'create_whitelc':True, 'fit_whitelc':True, \
                      'create_speclcs':True, 'fit_speclcs':True }, \
           white_mcmc={ 'ngroups':3, 'nwalkers':150, 'nburn1':100, \
                        'nburn2':500, 'nsteps':500 }, \
@@ -61,9 +61,11 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
     spectra_rdiff_zapped_fpath = spectra_fpaths[3]
 
     # Create and fit the white lightcurve:
-    if switches['create_and_fit_whitelc']==True:
-        #ngroups
+    if switches['create_whitelc']==True:
         whitelc_fpath = create_whitelc( wlc, spectra_rdiff_zapped_fpath, red )
+    else:
+        whitelc_fpath = get_whitelc_fpath( spectra_rdiff_zapped_fpath )
+    if switches['fit_whitelc']==True:        
         white_fpaths = fit_whitelc( whitelc_fpath, syspars, red, \
                                     ngroups=white_mcmc['ngroups'], \
                                     nwalkers=white_mcmc['nwalkers'], \
@@ -71,7 +73,6 @@ def main( switches={ 'extract_spectra':True, 'create_and_fit_whitelc':True, \
                                     nburn2=white_mcmc['nburn2'], \
                                     nsteps=white_mcmc['nsteps'] )
     else:
-        whitelc_fpath = get_whitelc_fpath( spectra_rdiff_zapped_fpath )
         white_fpaths = get_whitefit_fpath( whitelc_fpath )
     whitetxt_fpath, whitemcmc_fpath, whitemle_fpath = white_fpaths
 
@@ -392,6 +393,35 @@ def create_whitelc( z, spectra_fpath, red ):
     ofile = open( opath, 'wb' )
     pickle.dump( whitelc, ofile )
     ofile.close()
+    scanmode, ixsf, ixsr = determine_scanmode( whitelc['scandirs'] )
+    plt.ioff()
+    fig = plt.figure( figsize=[12,12] )
+    ax1 = fig.add_subplot( 4, 1, 1 )
+    ax2 = fig.add_subplot( 4, 1, 2, sharex=ax1 )
+    ax3 = fig.add_subplot( 4, 1, 3, sharex=ax1 )
+    ax4 = fig.add_subplot( 4, 1, 4, sharex=ax1 )
+    if ( scanmode=='forward' )+( scanmode=='reverse' ):
+        c = 'k'
+        ax1.plot( whitelc['jd'], whitelc['flux'], 'o', mfc=c, mec=c )
+        ax2.plot( whitelc['jd'], whitelc['auxvars']['background_ppix'], 'o', mfc=c, mec=c )
+        ax3.plot( whitelc['jd'], whitelc['auxvars']['wavshift_pixels'], 'o', mfc=c, mec=c )
+        ax4.plot( whitelc['jd'], whitelc['auxvars']['cdcs'], 'o', mfc=c, mec=c )
+    elif scanmode=='bidirection':
+        ixs = [ ixsf, ixsr ]
+        c = [ 'c', 'r' ]
+        for i in range( 2 ):
+            ax1.plot( whitelc['jd'][ixs[i]], whitelc['flux'][ixs[i]], 'o', mfc=c[i], mec=c[i] )
+            ax2.plot( whitelc['jd'][ixs[i]], whitelc['auxvars']['background_ppix'][ixs[i]], \
+                      'o', mfc=c[i], mec=c[i] )
+            ax3.plot( whitelc['jd'][ixs[i]], whitelc['auxvars']['wavshift_pixels'][ixs[i]], \
+                      'o', mfc=c[i], mec=c[i] )
+            ax4.plot( whitelc['jd'][ixs[i]], whitelc['auxvars']['cdcs'][ixs[i]], 'o', mfc=c[i], mec=c[i] )
+    ax1.set_ylabel( 'flux' )
+    ax2.set_ylabel( 'background' )
+    ax3.set_ylabel( 'dx (pix)' )
+    ax4.set_ylabel( 'dy (pix)' )
+    ax4.set_xlabel( 'JD' )
+    fig.savefig( opath.replace( '.pkl', '.pdf' ) )
     print( '\nSaved:\n{0}\n'.format( opath ) )
     return opath
 
@@ -1929,6 +1959,7 @@ def plot_basic_timeseries( z, red ):
     ax3.set_ylabel( 'hstphase' )
     ax4.set_ylabel( 'disp (pix)' )
     ax5.set_ylabel( 'cdisp (pix)' )
+    ax5.set_xlabel( 'JD' )
     opath = get_timeseries_fpath( red )
     fig.savefig( opath )
     plt.ion()
