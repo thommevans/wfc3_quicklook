@@ -342,8 +342,14 @@ def extract_spectra( red, save_rdiff_pngs=False ):
     hstphase = np.mod( delt, HST_ORB_PERIOD_DAYS )/float( HST_ORB_PERIOD_DAYS )
     ixs = hstphase>0.5
     hstphase[ixs] -= 1
+    # Split the orbits:
+    orbixs = split_orbixs( delt*24 )
+    torb = np.zeros( jd.size )
+    for i in orbixs:
+        torb[i] = jd[i]-jd[i][0]
     auxvars = {}
     auxvars['jd'] = jd
+    auxvars['torb'] = torb
     auxvars['hstphase'] = hstphase
     auxvars['background_ppix'] = bg_ppix
     f2d = [ ecounts2d_rlast, ecounts2d_rlast_zapped, ecounts2d_rdiff, ecounts2d_rdiff_zapped ]
@@ -1943,6 +1949,19 @@ def determine_scanmode( scandirs ):
     else:
         pdb.set_trace() # this shouldn't happen
     return scanmode, forward, reverse
+
+def split_orbixs( thrs ):
+    tmins = thrs*60.0
+    n = len( tmins )
+    ixs = np.arange( n )
+    dtmins = np.diff( tmins )
+    a = 1 + np.arange( n )[dtmins>10]
+    a = np.concatenate( [ [0], a, [n] ] )
+    norb = len( a ) - 1
+    orbixs = []
+    for i in range( norb ):
+        orbixs += [ np.arange( a[i], a[i + 1] ) ]
+    return orbixs
 
 def plot_basic_timeseries( z, red ):
     plt.ioff()
