@@ -1561,7 +1561,59 @@ def lnprior_lnlike_secondary_forward( jd, t, syspars, scanmode, Tmidlit, batpar 
         return gpobj.lnlikelihood( resids, quiet=True )
     return lnprior, lnlike, eval_model_secondary, eval_meanfunc_secondary
 
-def lnpost_func( lnprior, lnlike ):
+
+def lnprior_lnlike_secondary_bidirection( jd, t, syspars, Tmidlit, batpar, forward, reverse ):
+    """
+    Defines the prior and data likelihood for a primary transit model.
+    """
+    lnprior = lnprior_primary_bidirection
+    def eval_model_secondary( pars ):
+        # Unpack the parameters:
+        A_f, lniLx_f, lniLy_f, lniLz_f, c0_f, c1_f = pars[:6] # forward-scan systematics
+        A_r, lniLx_r, lniLy_r, lniLz_r, c0_r, c1_r = pars[6:12] # reverse-scan systematics
+        SecDepth, delT = pars[12:] # planet signal
+        # Evaluate the forward-scan components:
+        ttrend_f, psignal_f = eval_meanfunc_secondary( jd[forward], t[forward], [ c0_f, c1_f, SecDepth, delT ] )
+        A2_f = A_f**2.
+        lniL_f = np.array( [ lniLx_f, lniLy_f, lniLz_f ] )
+        L2_f = ( 1./np.exp( lniL_f ) )**2.
+        kernel_f = A2_f*george.kernels.Matern32Kernel( L2_f, ndim=L2_f.size )
+        gpobj_f = george.GP( kernel_f )
+        # Evaluate the reverse-scan components:
+        ttrend_r, psignal_r = eval_meanfunc_secondary( jd[reverse], t[reverse], [ c0_r, c1_r, SecDepth, delT ] )
+        A2_r = A_r**2.
+        lniL_r = np.array( [ lniLx_r, lniLy_r, lniLz_r ] )
+        L2_r = ( 1./np.exp( lniL_r ) )**2.
+        kernel_r = A2_r*george.kernels.Matern32Kernel( L2_r, ndim=L2_r.size )
+        gpobj_r = george.GP( kernel_r )
+        return ttrend_f, ttrend_r, psignal_f, psignal_r, gpobj_f, gpobj_r
+    def eval_meanfunc_secondary( jd, t, pars ):
+        c0, c1, SecDepth, delT = pars
+        ttrend = c0 + c1*t
+        batpar.t_secondary = Tmidlit + delT
+        batpar.fp = SecDepth
+        pmodel = batman.TransitModel( batpar, jd, fac=0.02, transittype='secondary' )
+        psignal = pmodel.light_curve( batpar )        
+        return ttrend, psignal
+    def lnlike( pars, x, y, e ):
+        """
+        Log( data likelihood ) function
+        """
+        ttrend_f, ttrend_r, psignal_f, psignal_r, gpobj_f, gpobj_r = eval_model_secondary( pars )
+        # Compute log-likelihood for the forward scan:
+        gpobj_f.compute( x[forward,:], yerr=e )
+        resids_f = y[forward] - ttrend_f*psignal_f
+        lnlike_f = gpobj_f.lnlikelihood( resids_f, quiet=True )
+        # Compute log-likelihood for the reverse scan:
+        gpobj_r.compute( x[reverse,:], yerr=e )
+        resids_r = y[reverse] - ttrend_r*psignal_r
+        lnlike_r = gpobj_r.lnlikelihood( resids_r, quiet=True )
+        return lnlike_f+lnlike_r
+    return lnprior, lnlike, eval_model_secondary, eval_meanfunc_secondary
+
+
+  
+  def lnpost_func( lnprior, lnlike ):
     """
     Defines the model posterior to be marginalised over.
     """
