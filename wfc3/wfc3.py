@@ -311,15 +311,79 @@ def lnprior_secondary_forward( pars ):
     lndelT = np.log( scipy.stats.uniform.pdf( delT, loc=low, scale=upp-low ) )
     return lnA + lnlniLx + lnlniLy + lnlniLz + lnc0 + lnc1 + lnSecDepth + lndelT
 
+  
 def lnprior_secondary_bidirection( pars ):
     """
     Log( prior ) function for a secondary eclipse dataset taken in bidirection
     scanning mode. Hopefully this default prior will be sufficient, but
     it can be edited if necessary.
     """
-    # todo
-    pdb.set_trace()
-    return None
+    nscandir = 2
+    # Systematics parameters for 1st scandir:
+    A_f = pars[0]
+    lniLx_f = pars[1]
+    lniLy_f = pars[2]
+    lniLz_f = pars[3]
+    c0_f = pars[4]
+    c1_f = pars[5]
+    # Systematics parameters for 2nd scandir:
+    A_r = pars[6]
+    lniLx_r = pars[7]
+    lniLy_r = pars[8]
+    lniLz_r = pars[9]
+    c0_r = pars[10]
+    c1_r = pars[11]
+    # Combine pairs of parameters:
+    A = [ A_f, A_r ]
+    lniLx = [ lniLx_f, lniLx_r ]
+    lniLy = [ lniLy_f, lniLy_r ]
+    lniLz = [ lniLz_f, lniLz_r ]
+    c0 = [ c0_f, c0_r ]
+    c1 = [ c1_f, c1_r ]
+    # Systematics parameters for shared planet parameters:
+    SecDepth = pars[12]
+    delT = pars[13]
+    # Compute prior values for systematics parameters:
+    lnA = lnlniLx = lnlniLy = lnlniLz = lnc0 = lnc1 = 0
+    for i in range( nscandir ):
+        ##################################
+        # Gamma prior for A:
+        alpha = 1
+        beta = 1e2
+        if A[i]<=0:
+            lnA += -np.inf
+        else:
+            lnA += np.log( scipy.stats.gamma.pdf( A[i], alpha, loc=0, scale=1/beta ) )
+        ##################################
+        # Uniform prior for lniL:
+        low = -5
+        upp = 5
+        lnlniLx += np.log( scipy.stats.uniform.pdf( lniLx[i], loc=low, scale=upp-low ) )
+        lnlniLy += np.log( scipy.stats.uniform.pdf( lniLy[i], loc=low, scale=upp-low ) )
+        lnlniLz += np.log( scipy.stats.uniform.pdf( lniLz[i], loc=low, scale=upp-low ) )
+        ##################################
+        # Uniform prior for c0:
+        low = 0.98
+        upp = 1.02
+        lnc0 += np.log( scipy.stats.uniform.pdf( c0[i], loc=low, scale=upp-low ) )
+        ##################################
+        # Uniform prior for c1:
+        low = -1
+        upp = 1
+        lnc1 += np.log( scipy.stats.uniform.pdf( c1[i], loc=low, scale=upp-low ) )
+        ##################################
+    # Compute prior values for shared planet parameters:
+    ##################################
+    # Uniform prior for SecDepth:
+    low = -1e-2
+    upp = 1e-2
+    lnSecDepth = np.log( scipy.stats.uniform.pdf( SecDepth, loc=low, scale=upp-low ) )
+    ##################################
+    # Uniform prior for delT
+    low = -1./24.
+    upp = 1./24.
+    lndelT = np.log( scipy.stats.uniform.pdf( delT, loc=low, scale=upp-low ) )
+    return lnA + lnlniLx + lnlniLy + lnlniLz + lnc0 + lnc1 + lnSecDepth + lndelT
 
 
 #################################################################################
@@ -1566,7 +1630,7 @@ def lnprior_lnlike_secondary_bidirection( jd, t, syspars, Tmidlit, batpar, forwa
     """
     Defines the prior and data likelihood for a primary transit model.
     """
-    lnprior = lnprior_primary_bidirection
+    lnprior = lnprior_secondary_bidirection
     def eval_model_secondary( pars ):
         # Unpack the parameters:
         A_f, lniLx_f, lniLy_f, lniLz_f, c0_f, c1_f = pars[:6] # forward-scan systematics
