@@ -1796,8 +1796,9 @@ def ld_fit_law( grid_mu, grid_wav_nm, grid_intensities, passband_wav_nm, \
     if plot_fits==True:
         ax2.plot( grid_mu, integrated_intensities, 'ok' )
         cs = [ 'PaleGreen', 'ForestGreen', 'Indigo', 'Orange' ]
-    for law in laws:
-        name, phi = law( grid_mu, coeffs=None )
+    n = len( laws )
+    for i in range( n ):
+        name, phi = laws[i]( grid_mu, coeffs=None )
         # Following Sing (2010), exclude certain values
         # of mu, depending on the limb darkening law:
         if name=='fourparam_nonlin':
