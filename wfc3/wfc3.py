@@ -1708,6 +1708,11 @@ def ld_fit_law( grid_mu, grid_wav_nm, grid_intensities, passband_wav_nm, \
     nonlinear and four-parameter nonlinear.
     """    
 
+    # If no passband transmission function has been provided, use
+    # a simple boxcar function:
+    if passband_sensitivity is not None:
+        passband_sensitivity = np.ones( passband_wav_nm.size )
+
     # Make sure the throughput goes to zero at the edges:
     ixs = np.argsort( passband_wav_nm )
     passband_wav_nm = passband_wav_nm[ixs]
@@ -1732,11 +1737,6 @@ def ld_fit_law( grid_mu, grid_wav_nm, grid_intensities, passband_wav_nm, \
         yf[:,i] = np.interp( xf, grid_wav_nm, grid_intensities[:,i] )
     grid_wav_nm = xf
     grid_intensities = yf    
-
-    # If no passband transmission function has been provided, use
-    # a simple boxcar function:
-    if passband_sensitivity==None:
-        passband_sensitivity = np.ones( passband_wav_nm.size )
 
     # Interpolate passband wavelengths onto model wavelength grid:
     ixs = np.argsort( passband_wav_nm )
