@@ -801,11 +801,11 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift_pixel=5, dwav=0
 
     # Convert smoothing fwhm to the standard deviation of the
     # Gaussian kernel, and smooth the reference spectrum:
-    if smoothing_fwhm!=None:
+    if smoothing_fwhm==None:
+        smoothing_fwhm = 0.0
+    if ( smoothing_fwhm>0 ):
         smoothing_sig = smoothing_fwhm/2./np.sqrt( 2.*np.log( 2. ) )
         ref_spectrum = scipy.ndimage.filters.gaussian_filter1d( ref_spectrum, smoothing_sig )
-    else:
-        smoothing_sig = None
 
     # Interpolate the reference spectrum on to a grid of
     # increments equal to the dwav shift increment:
