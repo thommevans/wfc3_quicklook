@@ -1710,7 +1710,7 @@ def ld_fit_law( grid_mu, grid_wav_nm, grid_intensities, passband_wav_nm, \
 
     # If no passband transmission function has been provided, use
     # a simple boxcar function:
-    if passband_sensitivity is not None:
+    if passband_sensitivity is None:
         passband_sensitivity = np.ones( passband_wav_nm.size )
 
     # Make sure the throughput goes to zero at the edges:
@@ -1753,7 +1753,8 @@ def ld_fit_law( grid_mu, grid_wav_nm, grid_intensities, passband_wav_nm, \
         y1 = stellar_spec/stellar_spec.max()
         ax1.plot( x1, y1, '-', c='DodgerBlue', label='Mean Stellar Intensity' )
         ax1.fill_between( passband_wav_nm, np.zeros( passband_sensitivity.size ), \
-                          passband_sensitivity, edgecolor='Salmon', facecolor='none', zorder=10, label='Passband' )
+                          passband_sensitivity, edgecolor='Salmon', facecolor='Salmon', \
+                          alpha=0.3, zorder=10, label='Passband' )
         ixs1 = ( y1>0.05*y1.max() )*( x1>x1[np.argmax(y1)] )
         ax1.set_xlim( [ 0, x1[ixs1].max() ] )
         ax1.set_xlabel( 'Wavelength (nm)' )
@@ -2024,7 +2025,7 @@ def read_atlas_grid( model_filepath=None, teff=None, logg=None, new_grid=False )
     # Note: The 'new' model grids don't quite have the 
     # same format, so they won't work for this code.
 
-    print( '\nLimb darkening:\nreading in the model grid...' )
+    print( '\nReading in stellar model grid...' )
     ifile = open( model_filepath, 'rU' )
     ifile.seek( 0 )
     rows = ifile.readlines()
@@ -2199,11 +2200,33 @@ def get_whitelc_fpath( spectra_fpath ):
     return opath
 
 def get_cullixs( jd, discard_first_exposure ):
-    cullixs = discard_first_orbit_ixs( jd )
-    if discard_first_exposure==True:
-        dt = np.diff( jd[cullixs] )
-        cullixs = cullixs[1+np.arange( cullixs.size )[dt<10./60./24.]]
+    n = len( jd )
+    thrs = 24*( jd-jd[0] )
+    orbixs = split_orbixs( thrs )
+    norb = len( orbixs )
+    # Discard first orbit and remove first
+    # exposure from each subsequent orbit:
+    cullixs = []
+    for i in range( norb-1 ):
+        if discard_first_exposure==True:
+            cullixs += [ orbixs[i+1][1:] ]
+        else:
+            cullixs += [ orbixs[i+1] ]
+    cullixs = np.concatenate( cullixs )
     return cullixs
+
+def split_orbixs( thrs ):
+    tmins = thrs*60.0
+    n = len( tmins )
+    ixs = np.arange( n )
+    dtmins = np.diff( tmins )
+    a = 1 + np.arange( n-1 )[dtmins>5*np.median( dtmins )]
+    a = np.concatenate( [ [0], a, [n] ] )
+    norb = len( a ) - 1
+    orbixs = []
+    for i in range( norb ):
+        orbixs += [ np.arange( a[i], a[i + 1] ) ]
+    return orbixs
 
 def get_spectra_fpath( red ):
     suffix = [ '.rlast.pkl', '.rlast.zapped.pkl', '.rdiff.pkl', '.rdiff.zapped.pkl' ]
@@ -2473,13 +2496,6 @@ def get_frames( red ):
     exptimes = np.array( exptimes )
     bg_ppix = np.array( bg_ppix_last_arr )
     return ecounts2d_rlast, ecounts2d_rdiff, tstarts, exptimes, scandirs, bg_ppix, fs
-
-def discard_first_orbit_ixs( jd ):
-    nframes = len( jd )
-    difft = np.diff( jd )*24*60
-    ixs = np.arange( nframes )[difft>10]
-    ixs = np.arange( int( ixs.min()+1 ), nframes )
-    return ixs
 
 def logp_mvnormal_whitenoise( r, u, n  ):
     """
