@@ -141,7 +141,12 @@ def dataset_parameters():
     syspars['incl'] = 89.5 # orbital inclination (degrees)
     syspars['ecc'] = 0.0 # orbital eccentricity 
     syspars['omega'] = 90. # longitude of periastron (degrees)
-    syspars['Tmid'] = syspars['T0'] # transit/eclipse mid-time
+    if syspars['tr_type']=='primary':
+        syspars['Tmid'] = syspars['T0'] # Tmid is transit mid-time
+    elif syspars['tr_type']=='secondary':
+        syspars['Tmid'] = syspars['T0']+0.5*syspars['P'] # Tmid is eclipse mid-time
+    else:
+        pdb.set_trace()
 
     return red, wlc, slc, syspars
 
