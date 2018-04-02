@@ -1539,7 +1539,7 @@ def lnprior_lnlike_primary_forward( jd, t, syspars, Tmidlit, batpar ):
         """
         Log( data likelihood ) function
         """
-        ttrend, psignal, gpobj = eval_model_primary( pars, x )
+        ttrend, psignal, gpobj = eval_model_primary( pars )
         gpobj.compute( x, yerr=e )
         resids = y - ttrend*psignal
         return gpobj.lnlikelihood( resids, quiet=True )
@@ -2106,7 +2106,7 @@ def split_orbixs( thrs ):
     n = len( tmins )
     ixs = np.arange( n )
     dtmins = np.diff( tmins )
-    a = 1 + np.arange( n )[dtmins>10]
+    a = 1 + np.arange( n-1 )[dtmins>5*np.median( dtmins )]
     a = np.concatenate( [ [0], a, [n] ] )
     norb = len( a ) - 1
     orbixs = []
