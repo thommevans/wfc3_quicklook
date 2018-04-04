@@ -3,7 +3,7 @@ import math
 import numpy as np
 import scipy, scipy.ndimage, scipy.stats
 import matplotlib.pyplot as plt
-import pyfits
+import astropy.io.fits as pyfits
 import os, pdb, time
 import glob
 import pickle
@@ -84,7 +84,7 @@ def main( switches={ 'extract_spectra':True, 'create_whitelc':True, 'fit_whitelc
 
     # Fit the spectroscopic lightcurves:
     if switches['fit_speclcs']==True:
-        wavc, RpRs_vals, RpRs_uncs = fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath )
+        wavc, yvals, yuncs = fit_speclcs_linmodel_quick( whitemle_fpath, speclcs_fpath )
 
     t2 = time.time()
     print( '\n\nTotal time taken = {0:.2f} minutes\n\n'.format( ( t2-t1 )/60. ) )
@@ -1375,8 +1375,7 @@ def mle_model_whitelc_bidirection( jd, flux, sigw, xvec, Tmid, mle_arr, chain, \
     return mle_model
 
 
-
-def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
+def fit_speclcs_linmodel_quick( whitemle_fpath, speclcs_fpath ):
     """
     Fits the spectroscopic lightcurves with a very simple linear time trend baseline
     multiplied by the transit/eclipse model. The reason for adopting such a simple 
@@ -1397,6 +1396,7 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     syspars = whitemle['syspars']
     jd = speclcs['jd']
     tv = speclcs['auxvars']['jdv']
+    hstphasev = speclcs['auxvars']['hstphasev']
     labels = [ 'raw', 'cm1', 'cm2', 'ss' ]
     flux_raw = speclcs['flux_raw']
     flux_cm1 = speclcs['flux_cm1']
@@ -1410,6 +1410,8 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     uncs = [ uncs_raw, uncs_cm1, uncs_cm2, uncs_ss ]
 
     nch, ndat = flux_ss.shape
+    offset = np.ones( ndat )
+    phi = np.column_stack( [ offset, tv, hstphasev, hstphasev**2., hstphasev**3., hstphasev**4. ] )
     ntypes = len( flux )
     psignal = []
     ttrend = []
@@ -1419,8 +1421,8 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
     ttrendf = []
     
     wavc = np.mean( speclcs['wavedges'], axis=1 )
-    RpRs_vals = np.zeros( [ nch, ntypes ] )
-    RpRs_uncs = np.zeros( [ nch, ntypes ] )
+    yvals = np.zeros( [ nch, ntypes ] )
+    yuncs = np.zeros( [ nch, ntypes ] )
     for k in range( ntypes ):
         psignalk = np.zeros( [ ndat, nch ] )
         ttrendk = np.zeros( [ ndat, nch ] )
@@ -1433,78 +1435,95 @@ def fit_speclcs_ttrend_quick( whitemle_fpath, speclcs_fpath ):
             ldi = speclcs['ld_nonlin'][i,:]
             batpar, pmodel = get_batman_object( jd, syspars, ld_type='nonlinear', ld_pars=ldi )
             if scanmode=='forward':
-                model_func_ttrend, initvals = speclcs_ttrend_forward( tv, whitemle, pmodel, batpar, syspars )
+                model_func_linm, initvals = speclcs_linmodel_forward( phi, fluxki, whitemle, \
+                                                                      pmodel, batpar, syspars )
             elif scanmode=='bidirection':
-                model_func_ttrend, initvals = speclcs_ttrend_bidirection( tv, whitemle, pmodel, batpar, \
+                model_func_linm, initvals = speclcs_linmodel_bidirection( phiv, fluxki, whitemle, \
+                                                                          pmodel, batpar, \
                                                                           syspars, forward, reverse )
             else:
                 pdb.set_trace()
-            pfit = scipy.optimize.curve_fit( model_func_ttrend, jd, fluxki, p0=initvals, \
+            pfit = scipy.optimize.curve_fit( model_func_linm, jd, fluxki, p0=initvals, \
                                              sigma=uncski, absolute_sigma=True )
-            RpRs_val = pfit[0][-1]
-            RpRs_unc = np.sqrt( np.diag( pfit[1] ) )[-1]
-            RpRs_vals[i,k] = RpRs_val
-            RpRs_uncs[i,k] = RpRs_unc
+            yval = pfit[0][-1]
+            yunc = np.sqrt( np.diag( pfit[1] ) )[-1]
+            yvals[i,k] = yval
+            yuncs[i,k] = yunc
             print( 'Analysis {0:.0f}. Lightcurve {1:.0f}. fitval = {2}'.format( k+1, i+1, pfit[0][-1] ) )
     plt.figure()
     doff = 0.1*np.median( np.diff( wavc ) )
     for k in range( ntypes ):
-        plt.errorbar( wavc+k*doff, RpRs_vals[:,k], yerr=RpRs_uncs[:,k], fmt='.-', label=labels[k] )
+        plt.errorbar( wavc+k*doff, yvals[:,k], yerr=yuncs[:,k], fmt='.-', label=labels[k] )
     plt.legend()
-    return wavc, RpRs_vals, RpRs_uncs
+    return wavc, yvals, yuncs
 
-def speclcs_ttrend_forward( tv, whitemle, pmodel, batpar, syspars ):
+
+def speclcs_linmodel_forward( phi, flux, whitemle, pmodel, batpar, syspars ):
     if syspars['tr_type']=='primary':
-        initvals = [ 1, 0, whitemle['mle_vals']['RpRs'] ]
+        initvals = [ whitemle['mle_vals']['RpRs'] ]
         batpar.t0 = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0, c1, RpRs ):
-            ttrend = c0 + c1*tv
+        def model_func_linmodel( jd, RpRs ):
             batpar.rp = RpRs
             psignal = pmodel.light_curve( batpar )
-            return ttrend*psignal
+            resids = flux/psignal-1
+            c = np.linalg.lstsq( phi, resids )[0]
+            systematics = np.dot( phi, c )
+            return (1+systematics)*psignal
     elif syspars['tr_type']=='secondary':
-        initvals = [ 1, 0, whitemle['mle_vals']['SecDepth'] ]
+        initvals = [ whitemle['mle_vals']['SecDepth'] ]
         batpar.t_secondary = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0, c1, SecDepth ):
-            ttrend = c0 + c1*tv
+        def model_func_linmodel( jd, SecDepth ):
             batpar.fp = SecDepth
             psignal = pmodel.light_curve( batpar )
-            return ttrend*psignal
+            resids = flux/psignal-1
+            c = np.linalg.lstsq( phi, resids )[0]
+            systematics = np.dot( phi, c )
+            return (1+systematics)*psignal
     else:
         pdb.set_trace() # error with tr_type specification
-    return model_func_ttrend, initvals
+    return model_func_linmodel, initvals
 
-def speclcs_ttrend_bidirection( tv, whitemle, pmodel, batpar, syspars, forward, reverse ):
-    tv_f = tv[forward]
-    tv_r = tv[reverse]
-    ixs = np.argsort( np.concatenate( [ tv_f, tv_r ] ) )
+def speclcs_linmodel_bidirection( phi, flux, whitemle, pmodel, batpar, syspars, forward, reverse ):
+    ixs = np.arange( np.shape( phi )[0] )
+    ixs_f = ixs[forward]
+    ixs_r = ixs[reverse]
+    ixs = np.argsort( np.concatenate( [ ixs_f, ixs_r ] ) )
+    phi_f = phi[ixs_f,:]
+    phi_r = phi[ixs_r,:]
     if syspars['tr_type']=='primary':
-        initvals = [ 1, 0, 1, 0, whitemle['mle_vals']['RpRs'] ]
+        initvals = [ whitemle['mle_vals']['RpRs'] ]
         batpar.t0 = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0_f, c1_f, c0_r, c1_r, RpRs ):
-            ttrend_f = c0_f + c1_f*tv[forward]
-            ttrend_r = c0_r + c1_r*tv[reverse]
+        def model_func_linmodel( jd, RpRs ):
             batpar.rp = RpRs
             psignal = pmodel.light_curve( batpar )
-            model_f = ttrend_f*psignal[forward]
-            model_r = ttrend_r*psignal[reverse]
+            resids = flux/psignal-1
+            c_f = np.linalg.lstsq( phi_f, resids[ixs_f] )[0]
+            systematics_f = np.dot( phi_f, c )
+            c_r = np.linalg.lstsq( phi_r, resids[ixs_r] )[0]
+            systematics_r = np.dot( phi_r, c )
+            model_f = (1+systematics_f)*psignal[ixs_f]
+            model_r = (1+systematics_r)*psignal[ixs_r]
             y = np.concatenate( [ model_f, model_r ] )[ixs]
             return y
     elif syspars['tr_type']=='secondary':
-        initvals = [ 1, 0, 1, 0, whitemle['mle_vals']['SecDepth'] ]
+        initvals = [ whitemle['mle_vals']['SecDepth'] ]
         batpar.t_secondary = whitemle['mle_vals']['Tmid']
-        def model_func_ttrend( jd, c0_f, c1_f, c0_r, c1_r, SecDepth ):
-            ttrend_f = c0_f + c1_f*tv[forward]
-            ttrend_r = c0_r + c1_r*tv[reverse]
+        def model_func_linmodel( jd, SecDepth ):
             batpar.fp = SecDepth
             psignal = pmodel.light_curve( batpar )
-            model_f = ttrend_f*psignal[forward]
-            model_r = ttrend_r*psignal[reverse]
+            resids = flux/psignal-1
+            c_f = np.linalg.lstsq( phi_f, resids[ixs_f] )[0]
+            systematics_f = np.dot( phi_f, c )
+            c_r = np.linalg.lstsq( phi_r, resids[ixs_r] )[0]
+            systematics_r = np.dot( phi_r, c )
+            model_f = (1+systematics_f)*psignal[ixs_f]
+            model_r = (1+systematics_r)*psignal[ixs_r]
             y = np.concatenate( [ model_f, model_r ] )[ixs]
             return y
     else:
         pdb.set_trace() # error with tr_type specification
-    return model_func_ttrend, initvals
+    return model_func_linmodel, initvals
+
 
 #################################################################################
 # Likelihood functions.
@@ -1680,9 +1699,8 @@ def lnprior_lnlike_secondary_bidirection( jd, t, syspars, Tmidlit, batpar, forwa
         return lnlike_f+lnlike_r
     return lnprior, lnlike, eval_model_secondary, eval_meanfunc_secondary
 
-
   
-  def lnpost_func( lnprior, lnlike ):
+def lnpost_func( lnprior, lnlike ):
     """
     Defines the model posterior to be marginalised over.
     """
