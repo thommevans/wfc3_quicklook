@@ -2386,8 +2386,19 @@ def get_frames( red ):
     else:
         pdb.set_trace()
 
+    search_str = os.path.join( ddir, '*_ima.fits' )
+    fs = np.array( glob.glob( search_str ), dtype=str )
+
     c1, c2 = crossdisp_bound_ixs
     d1, d2 = trim_disp_ixs
+    hdu = pyfits.open( fs[0] )
+    frame = hdu[1].data[ntrim:-ntrim,ntrim:-ntrim]
+    hdu.close()
+    nscan, ndisp = np.shape( frame )
+    c1 = max( [ 0, c1 ] )
+    c2 = min( [ nscan, c2 ] )
+    d1 = max( [ 0, d1 ] )
+    d2 = min( [ ndisp, d2 ] )
 
     # Read in the raw frames:
     search_str = os.path.join( ddir, '*_ima.fits' )
@@ -2413,10 +2424,6 @@ def get_frames( red ):
             header1 = hdu[1].header
             frame = hdu[1].data[ntrim:-ntrim,ntrim:-ntrim]
             nscan, ndisp = np.shape( frame )
-            c1 = max( [ 0, c1 ] )
-            c2 = min( [ nscan, c2 ] )
-            d1 = max( [ 0, d1 ] )
-            d2 = min( [ ndisp, d2 ] )
             abs_m += [ np.abs( header1['LTM1_1'] ) ]
             v += [ header1['LTV1'] ]
             tstart = header0['EXPSTART']
@@ -2512,8 +2519,8 @@ def get_frames( red ):
                    .format( i+1, nframes, header0['OBSTYPE'], header0['FILTER'] ) )
             hdu.close()
             continue
-    ecounts2d_rlast = np.dstack( ecounts2d_rlast )
-    ecounts2d_rdiff = np.dstack( ecounts2d_rdiff )
+    ecounts2d_rlast = np.dstack( ecounts2d_rlast )[c1:c2+1,d1:d2+1,:]
+    ecounts2d_rdiff = np.dstack( ecounts2d_rdiff )[c1:c2+1,d1:d2+1,:]
     tstarts = np.array( tstarts )
     scandirs = np.array( scandirs )
     exptimes = np.array( exptimes )
