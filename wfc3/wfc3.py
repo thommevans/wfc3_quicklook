@@ -1103,16 +1103,18 @@ def fit_whitelc( whitelc_fpath, syspars, red, ngroups=3, nwalkers=150, nburn1=10
     neglnpost, lnpost = lnpost_func( lnprior, lnlike )    
 
     # Run an initial MLE:
+    print( '\nPerforming initial MLE analysis for white lightcurve...' )    
     data = ( xvec, flux, sigw )
     pfit = scipy.optimize.fmin( neglnpost, initvals, args=data, maxiter=1e4, xtol=1e-4, ftol=1e-4 )
     ndim = len( pfit )
-    print( '\nInitial MLE solution:' )
+    print( 'Done.\n\nInitial MLE solution:' )    
     for i in range( ndim ):
         print( '  {0} = {1}'.format( labels[i], pfit[i] ) )
 
     # Initial emcee burn-in to possibly locate better solution:
     p0 = [ np.array( pfit ) + perturbs*np.random.randn( ndim ) for i in range( nwalkers ) ]
     sampler = emcee.EnsembleSampler( nwalkers, ndim, lnpost, args=data )
+    print( '\nPerforming MCMC analysis for white lightcurve...' )
     print( 'Running burn-in' )
     p1, lnp1, _ = sampler.run_mcmc( p0, nburn1 )
     sampler.reset()
